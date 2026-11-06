@@ -1,0 +1,18 @@
+# Experiment: roll out the uncommitted copy whose /health/ queries the database.
+# Readiness returns to /health/, so all three probes use the changed endpoint.
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          image: shopping:9836d194-health-db
+          readinessProbe:
+            exec: null
+            httpGet:
+              path: /health/
+              port: 8000
+              httpHeaders:
+                - name: Host
+                  value: localhost
+            periodSeconds: 5
+            timeoutSeconds: 1

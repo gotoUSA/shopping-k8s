@@ -1,0 +1,24 @@
+$ kubectl -n shopping logs deploy/shopping-api --tail=6
+Found 3 pods, using pod/shopping-api-6568fff844-jckcp
+10.1.0.51 - - [07/Nov/2026:01:15:27 +0900] "GET /health/ HTTP/1.1" 200 16 "-" "curl/8.14.1"
+10.1.0.51 - - [07/Nov/2026:01:15:27 +0900] "GET /health/ HTTP/1.1" 200 16 "-" "curl/8.14.1"
+10.1.0.51 - - [07/Nov/2026:01:15:28 +0900] "GET /health/ HTTP/1.1" 200 16 "-" "curl/8.14.1"
+10.1.0.51 - - [07/Nov/2026:01:15:28 +0900] "GET /health/ HTTP/1.1" 200 16 "-" "curl/8.14.1"
+10.1.0.51 - - [07/Nov/2026:01:15:28 +0900] "GET /health/ HTTP/1.1" 200 16 "-" "curl/8.14.1"
+10.1.0.1 - - [07/Nov/2026:01:15:28 +0900] "GET /health/ HTTP/1.1" 200 16 "-" "kube-probe/1.34"
+
+$ kubectl -n shopping logs deploy/celery-main --tail=4
+[2026-11-07 01:15:00,008: INFO/ForkPoolWorker-2] shopping.tasks.order_tasks.expire_unpaid_orders[942a0520-792f-4a79-8005-24b57140643c]: 미
+[2026-11-07 01:15:00,020: INFO/ForkPoolWorker-1] shopping.tasks.payment_tasks.detect_orphaned_orders[7d59f31e-3b35-4c32-9937-23173463a9b2]: 
+[2026-11-07 01:15:00,024: INFO/ForkPoolWorker-2] shopping.tasks.order_tasks.expire_unpaid_orders[942a0520-792f-4a79-8005-24b57140643c]: 미
+INFO 📊 실패 이메일 재시도 완료: {'success': True, 'total_failed': 0, 'retry_attempted': 0, 'retry_success': 0}
+
+$ kubectl -n shopping exec deploy/celery-main -- celery -A myproject inspect ping
+[SelfHealing] Package not installed, signal hooks disabled
+->  main@celery-main-7c6cc4c8fc-zwpwq: OK
+        pong
+->  external@celery-external-95f5b5577-pptzx: OK
+        pong
+
+2 nodes online.
+

@@ -1,0 +1,29 @@
+$ kubectl -n shopping run load ... (request /health/ every 0.1s, print http_code and curl exit code)
+pod/load created
+
+$ kubectl -n shopping logs load | sort | uniq -c   # before rollout
+     80 200 0
+
+$ kubectl -n shopping rollout restart deployment/shopping-api
+deployment.apps/shopping-api restarted
+
+$ kubectl -n shopping rollout status deployment/shopping-api --timeout=300s
+Waiting for deployment "shopping-api" rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deployment "shopping-api" rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deployment "shopping-api" rollout to finish: 1 out of 3 new replicas have been updated...
+Waiting for deployment "shopping-api" rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deployment "shopping-api" rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deployment "shopping-api" rollout to finish: 2 out of 3 new replicas have been updated...
+Waiting for deployment "shopping-api" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "shopping-api" rollout to finish: 1 old replicas are pending termination...
+deployment "shopping-api" successfully rolled out
+
+$ kubectl -n shopping logs load | sort | uniq -c   # after rollout
+    385 200 0
+
+$ kubectl -n shopping get pods -l app=shopping-api
+NAME                            READY   STATUS    RESTARTS   AGE
+shopping-api-6568fff844-86kpb   1/1     Running   0          29s
+shopping-api-6568fff844-jckcp   1/1     Running   0          36s
+shopping-api-6568fff844-vjt9v   1/1     Running   0          22s
+

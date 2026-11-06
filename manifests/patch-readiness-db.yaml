@@ -1,0 +1,16 @@
+# Experiment: make readiness depend on PostgreSQL without changing shopping code.
+# Liveness stays on /health/ so a database outage does not restart the API.
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          readinessProbe:
+            httpGet: null
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -h "$DATABASE_HOST" -p "$DATABASE_PORT" -U "$DATABASE_USER" -d "$DATABASE_NAME"
+            periodSeconds: 5
+            timeoutSeconds: 3

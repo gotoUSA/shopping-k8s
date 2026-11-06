@@ -1,0 +1,12 @@
+# Experiment: after a Pod starts terminating, keep it listening for 10 seconds
+# so the Service rules can stop sending it new connections before SIGTERM.
+spec:
+  template:
+    spec:
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: api
+          lifecycle:
+            preStop:
+              exec:
+                command: [sleep, "10"]

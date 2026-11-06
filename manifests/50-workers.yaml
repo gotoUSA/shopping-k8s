@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-main
+  namespace: shopping
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-main
+  template:
+    metadata:
+      labels:
+        app: celery-main
+    spec:
+      containers:
+        - name: worker
+          image: shopping:9836d194
+          imagePullPolicy: Never
+          command:
+            - celery
+            - -A
+            - myproject
+            - worker
+            - -n
+            - main@%h
+            - -l
+            - info
+            - --concurrency=2
+            - -Q
+            - default,payment_critical,order_processing,points,notifications
+            - --prefetch-multiplier=1
+          envFrom:
+            - configMapRef:
+                name: shopping-config
+            - secretRef:
+                name: shopping-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-external
+  namespace: shopping
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-external
+  template:
+    metadata:
+      labels:
+        app: celery-external
+    spec:
+      containers:
+        - name: worker
+          image: shopping:9836d194
+          imagePullPolicy: Never
+          command:
+            - celery
+            - -A
+            - myproject
+            - worker
+            - -n
+            - external@%h
+            - -l
+            - info
+            - --concurrency=2
+            - -Q
+            - external_api
+            - --prefetch-multiplier=1
+          envFrom:
+            - configMapRef:
+                name: shopping-config
+            - secretRef:
+                name: shopping-secret
+---
+# Beat stays at one replica so scheduled tasks are not sent twice.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat
+  namespace: shopping
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: celery-beat
+  template:
+    metadata:
+      labels:
+        app: celery-beat
+    spec:
+      containers:
+        - name: beat
+          image: shopping:9836d194
+          imagePullPolicy: Never
+          command:
+            - celery
+            - -A
+            - myproject
+            - beat
+            - -l
+            - info
+            - --scheduler
+            - django_celery_beat.schedulers:DatabaseScheduler
+          envFrom:
+            - configMapRef:
+                name: shopping-config
+            - secretRef:
+                name: shopping-secret
