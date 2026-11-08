@@ -32,4 +32,7 @@ kubectl -n shopping logs job/migrate --tail=3
 
 kubectl apply -f manifests/40-api.yaml -f manifests/50-workers.yaml
 kubectl -n shopping rollout status deployment/shopping-api --timeout=200s
+
+kubectl apply -f addons/metrics-server-v0.9.1.yaml
+kubectl apply -f manifests/60-api-hpa.yaml
 kubectl -n shopping get pods

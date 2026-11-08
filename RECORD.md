@@ -61,7 +61,18 @@
   - `set image ... api=shopping:typo`: 명령은 `image updated`로 받아들여졌고, 새 Pod 1개(17:55:48 시작)만 `ErrImageNeverPull`. 기존 Pod 3개는 Running 유지(기본값 maxSurge 25% → 1, maxUnavailable 25% → 0). `describe` Events: `Scheduled` 성공 뒤 kubelet `Container image "shopping:typo" is not present with pull policy of Never`가 약 6분 동안 26번.
   - `rollout undo`: `mytest` 판으로 돌아갔고, 기존 Pod 3개는 그대로(18m), `typo` Pod만 사라짐.
   - 되돌린 뒤 API Pod 안에서 Service로 `curl -si shopping-api:8000/api/products/`(18:13): `HTTP/1.1 200 OK`, `Server: gunicorn`, 본문 `{"count":0,...}`.
-  - 이후 클러스터의 API 이미지는 `shopping:mytest`이고, `manifests/40-api.yaml`은 `shopping:9836d194`, `replicas: 1` 그대로다.
+  - 이후 클러스터의 API 이미지는 `shopping:mytest`이고, `manifests/40-api.yaml`은 `shopping:9836d194` 그대로다.
+- 2026-11-08 HPA(명령 입력과 출력 확인은 사용자, 해석 설명과 파일 작성은 Claude Code):
+  - `kubectl top`: `Metrics API not available`. 클러스터에 metrics-server가 없었다.
+  - metrics-server 설치: GitHub 릴리스 주소로 `kubectl apply -f`가 504(v0.7.2, v0.9.1 모두). 같은 시각 Claude Code의 `curl`은 v0.9.1을 200으로 받았다. 받은 파일을 `addons/metrics-server-v0.9.1.yaml`로 저장해 적용, 객체 9개 `created`.
+  - metrics-server `0/1 Running`. 로그 = `x509: cannot validate certificate for 192.168.65.3 because it doesn't contain any IP SANs`(kubelet 인증서), 이어서 readiness `no metrics to serve`. 파일에 `--kubelet-insecure-tls`(로컬 전용 주석)를 넣고 다시 적용 → Deployment만 `configured`, 나머지 8개 `unchanged`.
+  - 한가할 때 `kubectl top`: API CPU 4~6m, 메모리 235~247Mi. 워커 232Mi, Beat 144Mi, PostgreSQL 60Mi, Redis 33Mi.
+  - `set resources`로 API에 requests(CPU 100m, 메모리 256Mi), limits(메모리 512Mi). CPU limits는 넣지 않음. 명령 2번 → 중간 ReplicaSet `dcb6dc774`가 2개까지 뜨다 0으로, 최종 `b446fb5d` 3개. Deployment revision 14. API Pod QoS `BestEffort` → `Burstable`. PostgreSQL, Redis, 워커, Beat은 requests가 없어 `BestEffort` 그대로다.
+  - `kubectl autoscale ... --cpu-percent=50 --min=2 --max=6`(19:28:28 생성, `--cpu-percent`는 deprecated 경고, 같은 동작). 만든 직후 `<unknown>/50%`, REPLICAS 0. 이후 Events 3 → 2(`All metrics below target`, 생성 약 6분 뒤).
+  - 부하: `load/hpa-load.yaml`(busybox 반복문 4개, Service의 `/health/`). `kubectl top`: API 6개 Pod당 183~211m, 메모리 223~235Mi, 부하 Pod 1,942m. HPA `187%/50%`, Events 2 → 4, 1분쯤 뒤 4 → 6, Conditions `ScalingLimited True TooManyReplicas`.
+  - 부하 Pod 삭제 뒤 약 1분: `6%/50%`, REPLICAS 6. Events 6 → 2 한 줄(중간 개수 없음), 4 → 6 이벤트 약 7분 뒤. 삭제 시각을 따로 적지 않아 5분 창과의 정확한 대조는 하지 않았다. 이후 `ScalingLimited True TooFewReplicas`.
+  - 같은 PC에서 부하 Pod가 CPU 약 2코어를 써서, 처리량은 판단하지 않는다. 늘고 주는 동작만 확인했다.
+  - 클러스터와 파일 맞춤: `40-api.yaml`에 resources 추가, `replicas` 삭제(HPA가 정함), `manifests/60-api-hpa.yaml` 추가, `deploy.sh`에 metrics-server와 HPA 적용 추가. 이 파일들로 새로 배포해 보지는 않았다.
 
 ## 돌려 보지 않은 것
 

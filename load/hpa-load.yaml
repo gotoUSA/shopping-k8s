@@ -1,0 +1,23 @@
+# Load generator for the HPA test (local cluster only).
+# Four parallel loops request /health/ through the Service.
+# /health/ is used because /api/products/ has an anonymous rate limit (100/hour).
+# Start: kubectl apply -f load/hpa-load.yaml
+# Stop:  kubectl delete -f load/hpa-load.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hpa-load
+  namespace: shopping
+spec:
+  restartPolicy: Never
+  containers:
+    - name: load
+      image: busybox:1.36
+      command:
+        - /bin/sh
+        - -c
+        - |
+          for i in 1 2 3 4; do
+            (while true; do wget -q -O /dev/null http://shopping-api:8000/health/; done) &
+          done
+          wait

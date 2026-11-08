@@ -4,7 +4,7 @@ metadata:
   name: shopping-api
   namespace: shopping
 spec:
-  replicas: 1
+  # replicas is left to the HPA (60-api-hpa.yaml), so apply does not fight it.
   selector:
     matchLabels:
       app: shopping-api
@@ -27,6 +27,15 @@ spec:
           command: [gunicorn, "myproject.wsgi:application", -c, gunicorn.conf.py]
           ports:
             - containerPort: 8000
+          # Idle use measured 2026-11-08: about 5m CPU, 223-247Mi memory.
+          # HPA utilization is measured against the CPU request.
+          # No CPU limit: going over it throttles instead of restarting.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
           envFrom:
             - configMapRef:
                 name: shopping-config

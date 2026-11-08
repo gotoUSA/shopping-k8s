@@ -18,7 +18,7 @@ PNG는 실제 명령 출력을 `evidence/render.py`로 그린 이미지입니다
 
 - 클러스터: Docker Desktop Kubernetes, 노드 1개
 - 이미지: 쇼핑몰 저장소의 [Dockerfile](https://github.com/gotoUSA/selfhealing/blob/9836d194/Dockerfile)로 빌드한 로컬 이미지, 레지스트리 미사용
-- 올린 것: PostgreSQL, Redis, 마이그레이션 Job, API 3개, Celery 워커 2종, Beat 1개
+- 올린 것: PostgreSQL, Redis, 마이그레이션 Job, API(HPA로 2~6개), Celery 워커 2종, Beat 1개, metrics-server
 - 비밀값: `deploy.sh`가 생성해 클러스터 Secret에만 저장
 
 ## 재현
@@ -28,7 +28,6 @@ git clone https://github.com/gotoUSA/selfhealing.git build/src
 git -C build/src checkout 9836d194
 docker build -t shopping:9836d194 build/src
 bash deploy.sh
-kubectl -n shopping scale deployment shopping-api --replicas=3
 ```
 
 ## 시험 결과
@@ -42,7 +41,11 @@ kubectl -n shopping scale deployment shopping-api --replicas=3
 | DB 장애, `/health/` 원본 | READY `1/1`, 재시작 0, 요청 500 |
 | DB 장애, readiness `pg_isready` | READY `0/1`, 재시작 0, 응답 없음 |
 | DB 장애, `/health/`에 DB 확인 추가 | READY `0/1`, 재시작 늘어남, 응답 없음 |
+| 없는 이미지 이름으로 교체 | 새 Pod `ErrImageNeverPull`, 기존 Pod 3개 유지, `rollout undo`로 복구 |
+| HPA(CPU 50%, 2~6개), `/health/` 부하 | 2 → 4 → 6개(최대에 막힘), 부하를 끄고 몇 분 뒤 6 → 2개 (1회) |
+
+HPA 시험은 부하 Pod와 API가 같은 PC의 CPU를 나눠 써서(부하 Pod 약 2코어), 늘고 주는 동작만 확인했고 처리량은 재지 않았습니다.
 
 ## 해 보지 않은 것
 
-클라우드 배포, 실제 트래픽 운영, 레지스트리 업로드, Ingress, 자동 확장, 주문·결제 요청을 끝까지 처리하는 시험.
+클라우드 배포, 실제 트래픽 운영, 레지스트리 업로드, Ingress, 주문·결제 요청을 끝까지 처리하는 시험, 처리량 측정.
