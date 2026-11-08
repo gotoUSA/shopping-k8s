@@ -92,6 +92,19 @@ spec:
       labels:
         app: celery-beat
     spec:
+      # Beat reads its schedule from PostgreSQL (DatabaseScheduler) and exits
+      # with code 1 if the DB is down at start. Wait for the DB first.
+      initContainers:
+        - name: wait-for-db
+          image: shopping:9836d194
+          imagePullPolicy: Never
+          command:
+            - sh
+            - -c
+            - until pg_isready -h "$DATABASE_HOST" -p "$DATABASE_PORT"; do echo waiting for db; sleep 2; done
+          envFrom:
+            - configMapRef:
+                name: shopping-config
       containers:
         - name: beat
           image: shopping:9836d194

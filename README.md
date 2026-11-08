@@ -43,6 +43,8 @@ bash deploy.sh
 | DB 장애, `/health/`에 DB 확인 추가 | READY `0/1`, 재시작 늘어남, 응답 없음 |
 | 없는 이미지 이름으로 교체 | 새 Pod `ErrImageNeverPull`, 기존 Pod 3개 유지, `rollout undo`로 복구 |
 | HPA(CPU 50%, 2~6개), `/health/` 부하 | 2 → 4 → 6개(최대에 막힘), 부하를 끄고 몇 분 뒤 6 → 2개 (1회) |
+| DB를 내린 채 Beat 시작, 기본 설정 | `CrashLoopBackOff`, 5분 38초에 재시작 5번 |
+| 같은 조건, DB 대기 init 컨테이너 | `Init:0/1`로 대기, 재시작 0, DB가 돌아오자 바로 시작 (1회) |
 
 HPA 시험은 부하 Pod와 API가 같은 PC의 CPU를 나눠 써서(부하 Pod 약 2코어), 늘고 주는 동작만 확인했고 처리량은 재지 않았습니다.
 

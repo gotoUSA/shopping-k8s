@@ -73,6 +73,12 @@
   - 부하 Pod 삭제 뒤 약 1분: `6%/50%`, REPLICAS 6. Events 6 → 2 한 줄(중간 개수 없음), 4 → 6 이벤트 약 7분 뒤. 삭제 시각을 따로 적지 않아 5분 창과의 정확한 대조는 하지 않았다. 이후 `ScalingLimited True TooFewReplicas`.
   - 같은 PC에서 부하 Pod가 CPU 약 2코어를 써서, 처리량은 판단하지 않는다. 늘고 주는 동작만 확인했다.
   - 클러스터와 파일 맞춤: `40-api.yaml`에 resources 추가, `replicas` 삭제(HPA가 정함), `manifests/60-api-hpa.yaml` 추가, `deploy.sh`에 metrics-server와 HPA 적용 추가. 이 파일들로 새로 배포해 보지는 않았다.
+- 2026-11-08 Beat DB 대기 init 컨테이너(명령 입력과 출력 확인은 사용자, 매니페스트 작성과 해석 설명은 Claude Code):
+  - 고치기 전: `postgres` 0개로 내리고 Beat Pod 삭제. 새 Pod `...-nc4vt`가 5분 38초 동안 재시작 5번, `CrashLoopBackOff`.
+  - `manifests/50-workers.yaml` Beat에 `initContainers` `wait-for-db` 추가(쇼핑몰 이미지, `pg_isready -h $DATABASE_HOST -p $DATABASE_PORT`가 될 때까지 2초 간격). 서버 dry-run과 적용 결과 모두 워커 2종 `unchanged`, Beat만 `configured`.
+  - DB를 내린 채 적용: 새 Pod `...-fc52k`가 116초 동안 `Init:0/1`, 재시작 0. `logs -c wait-for-db` = `postgres:5432 - no response`, `waiting for db` 반복.
+  - `postgres` 1개로 올린 뒤: `1/1 Running`, 재시작 0(5분 35초 시점). init 로그 마지막 줄 `postgres:5432 - accepting connections`. Beat 로그 `21:19:13 DatabaseScheduler: Schedule changed.`
+  - 1회 시험이다. init 컨테이너는 시작할 때만 기다리고, 실행 중 DB가 끊기는 경우는 다루지 않는다.
 
 ## 돌려 보지 않은 것
 
