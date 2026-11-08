@@ -103,6 +103,17 @@
     - 새 Redis Pod는 23:45:41에 이미 `1/1 Running`이었는데, 두 워커의 두 번째 시도가 각각 약 40초·70초 뒤에 113으로 실패한 이유는 확인하지 않았다.
     - Beat: 23:46:00 `Sending due task republish-stalled-orders`, 오류 줄 없음. main이 그 작업을 다시 연결한 뒤 23:46:18 `received`, 바로 `succeeded`.
     - 세 Pod 재시작 0. 1회 시험.
+- 2026-11-09 Redis 대기열이 Pod 교체·갑작스러운 종료 뒤에도 남는지(전 시험 명령 입력은 사용자, 후 시험은 사용자 요청으로 Claude Code가 시각에 맞춰 실행. 시험 순서 설계·스크립트·해석은 Claude Code):
+  - 방법: 워커 2종을 0개로 줄여 Beat가 보내는 작업을 Redis에 쌓은 뒤, 센 다음 Redis를 내리고 다시 셌다(`tests/redis-queue-count.sh`). Redis를 내리는 명령은 Beat가 보내지 않는 홀수 분에만 실행했다. 쌓인 작업은 모두 대상 0건인 주기 점검 작업이라, 잃어도 다음 주기에 다시 돈다.
+  - 전(Deployment, 볼륨 없음, `kubectl delete pod`): 00:37 7건(`order_processing` 4, `default` 2, `external_api` 1) → 지운 뒤 `order_processing` 1, 전체 키 1. 지운 시각은 Pod 나이로 보아 00:41:30쯤이라 그 사이 00:38·00:40에 보낸 작업이 더 있었고, 지우기 직전 건수는 세지 않았다. 남은 1건은 새 Redis가 뜬 뒤 00:42:00에 보낸 작업으로 추정한다(센 시각 미기록).
+  - StatefulSet으로 바꿀 때 옛 Deployment에 있던 6건(00:45:00에 셈)은 옮기지 않아 사라졌다.
+  - 후 시험은 `tests/redis-persistence-run.sh`로 실행했고, 출력 전체는 `evidence/redis-persistence.txt`다. 갑자기 죽이기 위해 시험 중에만 `shareProcessNamespace: true`를 켰다(`tests/redis-crash.sh`). 컨테이너 안에서 Redis는 PID 1이라 `kill -9`가 무시되기 때문이다(버리는 Pod로 먼저 확인: PID 1 `/pause`, Redis PID 6, `kill -9` 뒤 `Error`). Redis 7.4.9, 저장 조건 기본값 `save 3600 1 300 100 60 10000`.
+  - 후-1(볼륨, appendonly 끔, `delete pod`): 00:49:06 2건 → 지운 뒤 00:49:11 2건. Redis 로그 `RDB age 2 seconds`, `keys loaded: 1`. 정상 종료 때 스냅샷을 저장했다.
+  - 후-2(볼륨, appendonly 끔, `kill -9`): 00:53:06 8건, `rdb_changes_since_last_save:6` → 00:53:09 2건. 잃은 6건 = 마지막 스냅샷(00:49 종료 때) 이후 바뀐 6건. Redis 로그 `RDB age 240 seconds`.
+  - appendonly 켜기(설정을 바꾸고 Pod 교체): 켜기 전 2건 → 켠 뒤 0건. Redis는 `appendonlydir`의 기록을 읽었는데(`RDB age 486 seconds`, `keys loaded: 0`), 이 기록은 00:45 StatefulSet을 처음 적용했을 때(appendonly 켬, 바로 뒤 `aof-off`) 만들어진 빈 기록이다(`/data/appendonlydir` 파일 시각 15:45 UTC, base 88바이트). appendonly가 켜져 있으면 더 새로운 `dump.rdb`(2건)보다 오래된 이 기록을 썼다. 시험 순서(켬 → 끔 → 켬)가 만든 결과이고, 기록 폴더가 없는 상태에서 처음 켜는 경우는 시험하지 않았다. 실행 중인 서버에서 켤 때는 `CONFIG SET appendonly yes`가 권장 방식으로 알고 있으나 확인하지 않았다.
+  - 후-3(볼륨, appendonly 켬, `kill -9`): 00:57:05 6건, `rdb_changes_since_last_save:6` → 00:57:09 6건. 로그 `DB loaded from incr file appendonly.aof.1.incr.aof`. 스냅샷 이후 바뀐 내용을 appendonly 기록에서 되살렸다. `everysec`이라 마지막 1초 안의 쓰기는 잃을 수 있는데, 그 범위는 시험하지 않았다.
+  - 정리: `cleanup`(정상 교체) 뒤 6건 유지, Redis가 다시 PID 1. 워커를 1개씩 올리자 대기열 0. main `received` 6·`succeeded` 6(쌓인 5건 + 00:58 새 작업 1건으로 추정), external `received` 1. 시험 동안 Beat 로그에 ERROR·WARNING 없음. 끝난 뒤 `kubectl diff -f manifests/21-redis.yaml` 차이 없음.
+  - 각 경우 1회 시험.
 
 ## 돌려 보지 않은 것
 

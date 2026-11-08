@@ -20,7 +20,7 @@ fi
 
 kubectl apply -f manifests/10-config.yaml -f manifests/20-postgres.yaml -f manifests/21-redis.yaml
 kubectl -n shopping rollout status statefulset/postgres --timeout=180s
-kubectl -n shopping rollout status deployment/redis --timeout=120s
+kubectl -n shopping rollout status statefulset/redis --timeout=120s
 
 kubectl apply -f manifests/30-migrate-job.yaml
 if ! kubectl -n shopping wait --for=condition=complete job/migrate --timeout=240s; then

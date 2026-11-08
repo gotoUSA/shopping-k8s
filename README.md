@@ -48,11 +48,14 @@ bash deploy.sh
 | 모든 Pod에 requests/limits | PostgreSQL `Guaranteed`, 나머지 `Burstable`. DB 교체 중 Beat 오류 로그 1건, 재시작 0 |
 | DB 연결 거부로 Beat 시작, `celery` logger `propagate`만 다르게 | False: 오류 줄 없음 / True: `CRITICAL ... OperationalError` 1줄 (1회, [tests/beat-logging.yaml](tests/beat-logging.yaml)) |
 | 워커·Beat에 `propagate: True` 적용, Redis Pod 삭제 | 작업 `received`·`succeeded`, Beat `Sending due task` 줄이 생김(중복 0). 끊김·재시도·다시 연결 줄이 보이고 45초·74초 뒤 다시 연결, 재시작 0 (1회) |
+| Redis 대기열, 볼륨 없음 → `delete pod` | 7건 쌓은 뒤 교체, 옛 작업 0건 |
+| 볼륨(StatefulSet), `delete pod` / `kill -9` | 2 → 2건 / 8 → 2건(마지막 스냅샷 이후 6건 잃음) |
+| 볼륨 + appendonly, `kill -9` | 6 → 6건. 시험 중 appendonly를 끄고 다시 켰을 때 오래된 빈 기록을 읽어 2 → 0건 ([출력](evidence/redis-persistence.txt), 각 1회) |
 
 ## 알려진 문제
 
 - ConfigMap이 `DJANGO_ENV: local`이라 `DEBUG = True`, Debug Toolbar가 켜져 있습니다.
-- Redis가 볼륨 없는 Deployment라, Pod가 바뀌면 Celery 대기열이 사라집니다.
+- Redis는 1개뿐입니다. 볼륨과 appendonly(`everysec`)로 교체·갑작스러운 종료 뒤에도 대기열이 남지만, Redis가 내려가 있는 동안은 작업을 보낼 수 없습니다.
 
 HPA 시험은 부하 Pod와 API가 같은 PC의 CPU를 나눠 써서(부하 Pod 약 2코어), 늘고 주는 동작만 확인했고 처리량은 재지 않았습니다.
 

@@ -1,0 +1,241 @@
+
+=== [00:44:59] start
+NAME                     READY   STATUS    RESTARTS   AGE
+redis-6b9cc77fb7-scsfh   1/1     Running   0          3m28s
+[00:45:00] queue count:
+external_api 1
+default 2
+order_processing 3
+keys total: 3
+
+=== [00:45:00] switch to StatefulSet (odd minute)
+deployment.apps "redis" deleted from shopping namespace
+statefulset.apps/redis created
+service/redis unchanged
+Waiting for 1 pods to be ready...
+partitioned roll out complete: 1 new pods have been updated...
+statefulset.apps/redis patched
+Waiting for partitioned roll out to finish: 0 out of 1 new pods have been updated...
+Waiting for 1 pods to be ready...
+Waiting for 1 pods to be ready...
+Waiting for 1 pods to be ready...
+partitioned roll out complete: 1 new pods have been updated...
+NAME      READY   STATUS    RESTARTS   AGE
+redis-0   1/1     Running   0          1s
+NAME              STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+data-postgres-0   Bound    pvc-207c2fba-249a-493a-a3f3-fec7bbf8cc16   1Gi        RWO            hostpath       <unset>                 2d1h
+data-redis-0      Bound    pvc-d4478074-eee3-4ba0-8ae6-b72c6dc54ae0   1Gi        RWO            hostpath       <unset>                 6s
+PID   USER     TIME  COMMAND
+    1 65535     0:00 /pause
+    7 redis     0:00 redis-server *:6379
+   28 root      0:00 sh -c ps; redis-cli info server | grep redis_version; redis-cli config get save | tr "\n" " "; echo
+   34 root      0:00 ps
+redis_version:7.4.9
+save 3600 1 300 100 60 10000 
+appendonly no 
+loading:0
+rdb_changes_since_last_save:0
+rdb_last_save_time:1794152713
+aof_enabled:0
+[00:45:14] queue count:
+keys total: 0
+
+=== [00:45:14] A1 volume only, graceful delete: accumulating (2 even-minute sends)
+appendonly no 
+loading:0
+rdb_changes_since_last_save:2
+rdb_last_save_time:1794152713
+aof_enabled:0
+[00:49:06] queue count:
+order_processing 2
+keys total: 1
+[00:49:06] delete pod redis-0
+pod "redis-0" deleted from shopping namespace
+[00:49:11] redis-0 ready (uid 0f550e2d, restarts 0)
+[00:49:11] queue count:
+order_processing 2
+keys total: 1
+appendonly no 
+loading:0
+rdb_changes_since_last_save:0
+rdb_last_save_time:1794152949
+aof_enabled:0
+7:C 08 Nov 2026 15:49:09.692 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+7:C 08 Nov 2026 15:49:09.692 * Redis version=7.4.9, bits=64, commit=00000000, modified=0, pid=7, just started
+7:C 08 Nov 2026 15:49:09.692 * Configuration loaded
+7:M 08 Nov 2026 15:49:09.692 * monotonic clock: POSIX clock_gettime
+7:M 08 Nov 2026 15:49:09.693 * Running mode=standalone, port=6379.
+7:M 08 Nov 2026 15:49:09.694 * Server initialized
+7:M 08 Nov 2026 15:49:09.694 * Loading RDB produced by version 7.4.9
+7:M 08 Nov 2026 15:49:09.694 * RDB age 2 seconds
+7:M 08 Nov 2026 15:49:09.694 * RDB memory usage when created 1.15 Mb
+7:M 08 Nov 2026 15:49:09.695 * Done loading RDB, keys loaded: 1, keys expired: 0.
+7:M 08 Nov 2026 15:49:09.695 * DB loaded from disk: 0.001 seconds
+7:M 08 Nov 2026 15:49:09.695 * Ready to accept connections tcp
+
+=== [00:49:12] A2 volume only, kill -9: accumulating (2 even-minute sends)
+appendonly no 
+loading:0
+rdb_changes_since_last_save:6
+rdb_last_save_time:1794152949
+aof_enabled:0
+[00:53:06] queue count:
+order_processing 5
+external_api 1
+default 2
+keys total: 3
+killing redis-server pid 7
+[00:53:09] redis-0 ready (uid 0f550e2d, restarts 1)
+[00:53:09] queue count:
+order_processing 2
+keys total: 1
+appendonly no 
+loading:0
+rdb_changes_since_last_save:0
+rdb_last_save_time:1794153187
+aof_enabled:0
+--- previous container log tail
+7:M 08 Nov 2026 15:49:09.694 * RDB age 2 seconds
+7:M 08 Nov 2026 15:49:09.694 * RDB memory usage when created 1.15 Mb
+7:M 08 Nov 2026 15:49:09.695 * Done loading RDB, keys loaded: 1, keys expired: 0.
+7:M 08 Nov 2026 15:49:09.695 * DB loaded from disk: 0.001 seconds
+7:M 08 Nov 2026 15:49:09.695 * Ready to accept connections tcp
+--- current container log tail
+369:C 08 Nov 2026 15:53:07.661 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+369:C 08 Nov 2026 15:53:07.661 * Redis version=7.4.9, bits=64, commit=00000000, modified=0, pid=369, just started
+369:C 08 Nov 2026 15:53:07.661 * Configuration loaded
+369:M 08 Nov 2026 15:53:07.662 * monotonic clock: POSIX clock_gettime
+369:M 08 Nov 2026 15:53:07.662 * Running mode=standalone, port=6379.
+369:M 08 Nov 2026 15:53:07.663 * Server initialized
+369:M 08 Nov 2026 15:53:07.663 * Loading RDB produced by version 7.4.9
+369:M 08 Nov 2026 15:53:07.663 * RDB age 240 seconds
+369:M 08 Nov 2026 15:53:07.663 * RDB memory usage when created 1.15 Mb
+369:M 08 Nov 2026 15:53:07.663 * Done loading RDB, keys loaded: 1, keys expired: 0.
+369:M 08 Nov 2026 15:53:07.663 * DB loaded from disk: 0.001 seconds
+369:M 08 Nov 2026 15:53:07.663 * Ready to accept connections tcp
+
+=== [00:53:10] AOF on (pod replaced)
+appendonly no 
+loading:0
+rdb_changes_since_last_save:0
+rdb_last_save_time:1794153187
+aof_enabled:0
+[00:53:10] queue count:
+order_processing 2
+keys total: 1
+statefulset.apps/redis patched
+Waiting for partitioned roll out to finish: 0 out of 1 new pods have been updated...
+Waiting for 1 pods to be ready...
+Waiting for 1 pods to be ready...
+Waiting for 1 pods to be ready...
+partitioned roll out complete: 1 new pods have been updated...
+pod/redis-0 condition met
+[00:53:15] queue count:
+keys total: 0
+appendonly yes 
+loading:0
+rdb_changes_since_last_save:0
+rdb_last_save_time:1794153194
+aof_enabled:1
+7:C 08 Nov 2026 15:53:14.500 * Redis version=7.4.9, bits=64, commit=00000000, modified=0, pid=7, just started
+7:C 08 Nov 2026 15:53:14.500 * Configuration loaded
+7:M 08 Nov 2026 15:53:14.500 * monotonic clock: POSIX clock_gettime
+7:M 08 Nov 2026 15:53:14.501 * Running mode=standalone, port=6379.
+7:M 08 Nov 2026 15:53:14.501 * Server initialized
+7:M 08 Nov 2026 15:53:14.505 * Reading RDB base file on AOF loading...
+7:M 08 Nov 2026 15:53:14.505 * Loading RDB produced by version 7.4.9
+7:M 08 Nov 2026 15:53:14.506 * RDB age 486 seconds
+7:M 08 Nov 2026 15:53:14.506 * RDB memory usage when created 0.90 Mb
+7:M 08 Nov 2026 15:53:14.506 * RDB is base AOF
+7:M 08 Nov 2026 15:53:14.506 * Done loading RDB, keys loaded: 0, keys expired: 0.
+7:M 08 Nov 2026 15:53:14.506 * DB loaded from base file appendonly.aof.1.base.rdb: 0.005 seconds
+7:M 08 Nov 2026 15:53:14.506 * DB loaded from append only file: 0.005 seconds
+7:M 08 Nov 2026 15:53:14.506 * Opening AOF incr file appendonly.aof.1.incr.aof on server start
+7:M 08 Nov 2026 15:53:14.506 * Ready to accept connections tcp
+ls: C:/Program Files/Git/data: No such file or directory
+ls: C:/Program Files/Git/data/appendonlydir: No such file or directory
+command terminated with exit code 1
+
+=== [00:53:16] A3 volume + AOF, kill -9: accumulating (2 even-minute sends)
+appendonly yes 
+loading:0
+rdb_changes_since_last_save:6
+rdb_last_save_time:1794153194
+aof_enabled:1
+[00:57:05] queue count:
+default 2
+external_api 1
+order_processing 3
+keys total: 3
+killing redis-server pid 7
+[00:57:09] redis-0 ready (uid e6ca9fbd, restarts 1)
+[00:57:09] queue count:
+default 2
+external_api 1
+order_processing 3
+keys total: 3
+appendonly yes 
+loading:0
+rdb_changes_since_last_save:6
+rdb_last_save_time:1794153428
+aof_enabled:1
+--- current container log tail
+370:M 08 Nov 2026 15:57:08.254 * Server initialized
+370:M 08 Nov 2026 15:57:08.254 * Reading RDB base file on AOF loading...
+370:M 08 Nov 2026 15:57:08.254 * Loading RDB produced by version 7.4.9
+370:M 08 Nov 2026 15:57:08.254 * RDB age 720 seconds
+370:M 08 Nov 2026 15:57:08.254 * RDB memory usage when created 0.90 Mb
+370:M 08 Nov 2026 15:57:08.254 * RDB is base AOF
+370:M 08 Nov 2026 15:57:08.254 * Done loading RDB, keys loaded: 0, keys expired: 0.
+370:M 08 Nov 2026 15:57:08.254 * DB loaded from base file appendonly.aof.1.base.rdb: 0.000 seconds
+370:M 08 Nov 2026 15:57:08.258 * DB loaded from incr file appendonly.aof.1.incr.aof: 0.003 seconds
+370:M 08 Nov 2026 15:57:08.258 * DB loaded from append only file: 0.004 seconds
+370:M 08 Nov 2026 15:57:08.258 * Opening AOF incr file appendonly.aof.1.incr.aof on server start
+370:M 08 Nov 2026 15:57:08.258 * Ready to accept connections tcp
+
+=== [00:57:10] cleanup (odd minute)
+[00:57:10] queue count:
+default 2
+external_api 1
+order_processing 3
+keys total: 3
+statefulset.apps/redis patched
+Waiting for partitioned roll out to finish: 0 out of 1 new pods have been updated...
+Waiting for 1 pods to be ready...
+Waiting for 1 pods to be ready...
+Waiting for 1 pods to be ready...
+partitioned roll out complete: 1 new pods have been updated...
+pod/redis-0 condition met
+[00:57:16] queue count:
+order_processing 3
+default 2
+external_api 1
+keys total: 3
+PID   USER     TIME  COMMAND
+    1 redis     0:00 redis-server *:6379
+   35 root      0:00 ps
+deployment.apps/celery-main scaled
+deployment.apps/celery-external scaled
+Waiting for deployment "celery-main" rollout to finish: 0 of 1 updated replicas are available...
+deployment "celery-main" successfully rolled out
+Waiting for deployment "celery-external" rollout to finish: 0 of 1 updated replicas are available...
+deployment "celery-external" successfully rolled out
+[00:58:00] queue count:
+keys total: 22
+--- celery-main received/succeeded since start of workers
+6
+6
+1
+
+=== [00:58:01] Beat errors during test
+NAME                              READY   STATUS      RESTARTS   AGE
+celery-beat-6988476484-n6gcg      1/1     Running     0          79m
+celery-external-888c7bdc8-sb6qc   1/1     Running     0          44s
+celery-main-79ff7567d-6j2cs       1/1     Running     0          44s
+migrate-pqsxd                     0/1     Completed   0          2d1h
+postgres-0                        1/1     Running     0          178m
+redis-0                           1/1     Running     0          48s
+shopping-api-b446fb5d-5nbkq       1/1     Running     0          5h34m
+shopping-api-b446fb5d-bbhd2       1/1     Running     0          5h34m
+
+=== [00:58:01] done
