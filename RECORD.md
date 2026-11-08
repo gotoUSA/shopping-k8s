@@ -53,6 +53,15 @@
 - 2026-11-07 `/health/` 수정본 시험(커밋 없는 복사본 `shopping:9836d194-health-db`, `/health/`가 `SELECT 1` 실행, startup·readiness·liveness 모두 이 경로, 실행은 Claude Code): PostgreSQL을 내리고 60초 뒤 API Pod 3개 `0/1`, 재시작 1. 120초 뒤 그대로 재시작 1. 240초 뒤 재시작 2. Event에 Readiness·Startup probe 500과 `Container api failed startup probe, will be restarted`. `/api/products/` 5번 모두 `000 7`. 사용자 예측은 `0/1`, 재시작 늘어남, 500으로 요청 결과만 달랐다. 앱 로그 `OperationalError`는 Pod별 0, 2, 4건이고 재시작으로 앞 로그가 빠졌을 수 있다.
 - 시험 뒤 PostgreSQL 복구, 원본 이미지로 복귀. 최종 설정은 `manifests/40-api.yaml`에 preStop을 반영했다(readiness는 `/health/`).
 - PostgreSQL을 다시 올린 뒤 API Pod 3개 `1/1`, 재시작 0으로 돌아왔다. Beat은 재시작 13회 후 Running.
+- 2026-11-08 빌드·교체·실패·되돌리기(명령 입력과 출력 확인은 사용자, 해석 설명은 Claude Code):
+  - Docker Desktop이 꺼져 있어 `kubectl`이 `127.0.0.1:6443` connection refused. Docker Desktop을 켜자 클러스터가 함께 시작됐고, 11-07의 Pod 9개가 같은 이름으로 남아 있었다(API 3개 = 11-06 `scale` 값 유지, Beat 재시작 20회). 다른 Pod의 마지막 재시작이 "17h ago"로 나온 이유는 확인하지 않았다.
+  - `build/src`에서 `docker build -t shopping:mytest .`: 11단계 모두 `CACHED`. IMAGE ID는 `9836d194`(`ffe3ef24923c`)와 다른 `bfb108321f09`이고, 레이어 생성 시각은 모두 42시간 전이다. ID 차이의 원인은 확인하지 않았다.
+  - `docker history`: `pip install -r requirements-dev.txt`(내용은 `-e ".[dev]"`, 운영·개발 패키지 합계) 862MB, `apt-get install` 498MB, 기본 이미지 약 134MB, 코드 6.43MB. 합계 약 1.5GB와 `DISK USAGE` 1.97GB의 차이는 확인하지 않았다.
+  - `kubectl set image deployment/shopping-api api=shopping:mytest`: 새 ReplicaSet `6798f444c6`, Pod 3개가 약 6초 간격으로 교체됐고, `rollout status`에 `1 old replicas are pending termination`(preStop 10초) 뒤 완료. 새 Pod 로그는 `kube-probe/1.34`의 `/health/` 200만 있고, 10초에 3번(readiness 5초, liveness 10초)이다.
+  - `set image ... api=shopping:typo`: 명령은 `image updated`로 받아들여졌고, 새 Pod 1개(17:55:48 시작)만 `ErrImageNeverPull`. 기존 Pod 3개는 Running 유지(기본값 maxSurge 25% → 1, maxUnavailable 25% → 0). `describe` Events: `Scheduled` 성공 뒤 kubelet `Container image "shopping:typo" is not present with pull policy of Never`가 약 6분 동안 26번.
+  - `rollout undo`: `mytest` 판으로 돌아갔고, 기존 Pod 3개는 그대로(18m), `typo` Pod만 사라짐.
+  - 되돌린 뒤 API Pod 안에서 Service로 `curl -si shopping-api:8000/api/products/`(18:13): `HTTP/1.1 200 OK`, `Server: gunicorn`, 본문 `{"count":0,...}`.
+  - 이후 클러스터의 API 이미지는 `shopping:mytest`이고, `manifests/40-api.yaml`은 `shopping:9836d194`, `replicas: 1` 그대로다.
 
 ## 돌려 보지 않은 것
 
