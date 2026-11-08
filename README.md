@@ -45,6 +45,12 @@ bash deploy.sh
 | HPA(CPU 50%, 2~6개), `/health/` 부하 | 2 → 4 → 6개(최대에 막힘), 부하를 끄고 몇 분 뒤 6 → 2개 (1회) |
 | DB를 내린 채 Beat 시작, 기본 설정 | `CrashLoopBackOff`, 5분 38초에 재시작 5번 |
 | 같은 조건, DB 대기 init 컨테이너 | `Init:0/1`로 대기, 재시작 0, DB가 돌아오자 바로 시작 (1회) |
+| 모든 Pod에 requests/limits | PostgreSQL `Guaranteed`, 나머지 `Burstable`. DB 교체 중 Beat 오류 로그 1건, 재시작 0 |
+
+## 알려진 문제
+
+- ConfigMap이 `DJANGO_ENV: local`이라 `DEBUG = True`, Debug Toolbar가 켜져 있습니다.
+- Redis가 볼륨 없는 Deployment라, Pod가 바뀌면 Celery 대기열이 사라집니다.
 
 HPA 시험은 부하 Pod와 API가 같은 PC의 CPU를 나눠 써서(부하 Pod 약 2코어), 늘고 주는 동작만 확인했고 처리량은 재지 않았습니다.
 

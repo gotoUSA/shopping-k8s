@@ -79,6 +79,13 @@
   - DB를 내린 채 적용: 새 Pod `...-fc52k`가 116초 동안 `Init:0/1`, 재시작 0. `logs -c wait-for-db` = `postgres:5432 - no response`, `waiting for db` 반복.
   - `postgres` 1개로 올린 뒤: `1/1 Running`, 재시작 0(5분 35초 시점). init 로그 마지막 줄 `postgres:5432 - accepting connections`. Beat 로그 `21:19:13 DatabaseScheduler: Schedule changed.`
   - 1회 시험이다. init 컨테이너는 시작할 때만 기다리고, 실행 중 DB가 끊기는 경우는 다루지 않는다.
+- 2026-11-08 나머지 Pod에 requests/limits(명령 입력과 출력 확인은 사용자, 매니페스트 작성·로그 집계·설정 파일 확인은 Claude Code):
+  - 값(한가할 때 측정값 기준): PostgreSQL requests = limits = CPU 500m, 메모리 512Mi(Guaranteed). Redis 50m/64Mi, 메모리 limit 256Mi. 워커 2종 100m/256Mi, 512Mi. Beat 50m/192Mi, 384Mi. 적용 전 서버 dry-run.
+  - 적용 순서: `50-workers.yaml`(워커·Beat) → `21-redis.yaml` → `20-postgres.yaml`. 결과 QoS: PostgreSQL `Guaranteed`, 나머지 `Burstable`(끝난 `migrate` Pod만 `BestEffort`). 모든 Pod 재시작 0.
+  - Redis 교체(롤링 업데이트): 워커 로그 21:31:09에 `CPendingDeprecationWarning`(연결이 끊기면 `acks_late` 작업은 확인할 수 없어 다시 전달된다는 내용), 이후 21:35·21:40 주기 작업 처리. 다시 연결했다는 줄은 없다(11-07 `celery` logger `propagate: False`와 같은 이유로 추정).
+  - Redis 매니페스트에 볼륨이 없어, Pod가 바뀌면 대기열과 처리 중 작업이 함께 사라진다. 쇼핑몰 작업 다수가 `acks_late=True`(build/src에서 확인)지만, 이는 워커가 죽는 경우를 위한 것이라 브로커 데이터 손실은 막지 못한다. 이번에는 21:31~21:35 사이 예정 작업이 없어 잃은 작업은 없었고, 일부러 시험하지 않았다. 롤링 업데이트 중 옛·새 Redis가 잠깐 함께 Service 뒤에 있는 점도 같은 문제다.
+  - PostgreSQL 교체: 새 `postgres-0` 시작 21:59:06. Beat 로그 21:59:10 `ERROR ... Database gave error: OperationalError(... Connection refused)` 1건, Beat 재시작 0. 워커는 22:00부터 5분마다 주기 작업을 계속 처리. API는 재시작 0(DB를 쓰는 요청의 그 사이 결과는 재지 않음). 교체 뒤 `/api/products/` 200(테이블 유지, 상품 0개라 행 유지는 확인 못 함).
+  - 같은 요청 응답에 `Server-Timing`(Debug Toolbar 패널, SQL 5.7ms, 전체 510ms)과 `djdt-request-id` 헤더. ConfigMap `DJANGO_ENV: local`(11-06 배포 때 Claude Code가 정함) → `local.py`의 `DEBUG = True`와 Debug Toolbar. 툴바는 `INTERNAL_IPS`(Pod IP 끝자리를 `.1`로 바꾼 주소)일 때만 켜지는데, 요청이 Service를 거쳐 보낸 Pod 자신에게 돌아가 출발지가 `10.1.0.1`이 됐다고 추정한다(확인 안 함). 18:13 응답에는 이 헤더가 없었다. 로컬이라 외부 노출은 없다.
 
 ## 돌려 보지 않은 것
 

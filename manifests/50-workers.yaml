@@ -30,6 +30,13 @@ spec:
             - -Q
             - default,payment_critical,order_processing,points,notifications
             - --prefetch-multiplier=1
+          # Idle use measured 2026-11-08: about 2m CPU, 232Mi memory.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
           envFrom:
             - configMapRef:
                 name: shopping-config
@@ -68,6 +75,13 @@ spec:
             - -Q
             - external_api
             - --prefetch-multiplier=1
+          # Idle use measured 2026-11-08: about 2m CPU, 232Mi memory.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
           envFrom:
             - configMapRef:
                 name: shopping-config
@@ -118,6 +132,13 @@ spec:
             - info
             - --scheduler
             - django_celery_beat.schedulers:DatabaseScheduler
+          # Idle use measured 2026-11-08: about 1m CPU, 144Mi memory.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              memory: 384Mi
           envFrom:
             - configMapRef:
                 name: shopping-config

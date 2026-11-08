@@ -35,6 +35,15 @@ spec:
             exec:
               command: [pg_isready, -U, shopping_user, -d, shopping_db]
             periodSeconds: 5
+          # Idle use measured 2026-11-08: 2-3m CPU, 60Mi memory.
+          # requests == limits makes this pod Guaranteed, so it is evicted last.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
