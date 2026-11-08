@@ -92,6 +92,17 @@
   - `beat-log-original`(원래 설정): 시작 안내(`celery beat v5.7.0 ... is starting`, `logfile -> [stderr]@%INFO`)까지만 나오고 오류 줄 없음.
   - `beat-log-propagate`: `23:02:40,878 CRITICAL/MainProcess beat raised exception <class 'django.db.utils.OperationalError'>: ... 127.0.0.1, port 5432 failed: Connection refused` 1줄, 이어서 traceback이 조각(`^`, `django.db.utils`, `.` 등)마다 `WARNING/MainProcess` 한 줄씩. 조각나는 이유는 Celery가 stderr를 로그로 바꾸는 동작으로 추정(코드 미확인).
   - 11-07 재현(Claude Code, 포트 오류·timeout)과 달리 이번은 실제 장애와 같은 connection refused다. 1회 시험.
+- 2026-11-08 워커 2종과 Beat에 `celery` logger `propagate: True` 적용(명령 입력과 출력 확인은 사용자, 매니페스트 작성·로그 집계는 Claude Code, `manifests/50-workers.yaml`):
+  - 방식은 `tests/beat-logging.yaml`과 같다. ConfigMap `celery-log-override`를 세 Deployment에 mount하고 `DJANGO_SETTINGS_MODULE=celery_log_override`로 지정했다. 쇼핑몰 저장소는 고치지 않았다. 적용 23:38, 세 Pod 재시작 0.
+  - 적용 전 워커 로그: 작업 안에서 남긴 줄(`미결제 주문 없음` 등)만 있고 Celery 자체 줄은 없었다.
+  - 적용 뒤 워커 로그: 시작 때 `Connected to redis://...`, `mingle`, `ready.`. 작업마다 `Task ... received`, `Task ... succeeded in <초>s: <반환값>`. main의 23:40·23:42 작업을 작업 ID별로 세어 `received`·`succeeded` 중복 0. `republish_stalled_orders`가 2분마다 도는 것이 보였다. 이 작업은 대상이 0건이면 스스로 로그를 남기지 않아 이전에는 로그로 확인할 수 없었다.
+  - Beat: 작업마다 `Scheduler: Sending due task ...` 1줄. 적용 직전(23:36쯤) 본 Beat 로그 마지막 8줄은 21:59 DB 오류 traceback이었고, 그 사이 5분마다 보낸 작업 줄은 없었다(마지막 8줄만 확인).
+  - Redis Pod 삭제(23:45:30, `kubectl delete pod`. 위 21:31 롤링 업데이트와 교체 방식이 달라 같은 조건 비교는 아니다):
+    - main: 23:45:32 `WARNING consumer: Connection to broker lost. Trying to re-establish the connection...`, 이어서 `ERROR Error on restarting Gossip: AttributeError(...)`와 긴 traceback 1건, `Cannot connect ... Connection refused` (1/100), 23:46:13 `Error 113 ... No route to host` (2/100), 23:46:17 `Connected`(끊긴 뒤 45초).
+    - external: 같은 순서로 23:46:46 `Connected`(74초), `mingle: sync with 1 nodes`.
+    - 새 Redis Pod는 23:45:41에 이미 `1/1 Running`이었는데, 두 워커의 두 번째 시도가 각각 약 40초·70초 뒤에 113으로 실패한 이유는 확인하지 않았다.
+    - Beat: 23:46:00 `Sending due task republish-stalled-orders`, 오류 줄 없음. main이 그 작업을 다시 연결한 뒤 23:46:18 `received`, 바로 `succeeded`.
+    - 세 Pod 재시작 0. 1회 시험.
 
 ## 돌려 보지 않은 것
 

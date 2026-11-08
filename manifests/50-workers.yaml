@@ -1,3 +1,19 @@
+# The shopping settings set the "celery" logger to propagate: False, and
+# under Celery it ends up with no handlers, so Celery's own messages (task
+# received/succeeded, broker reconnects, Beat startup errors) are dropped.
+# The shopping repository is frozen, so this settings module imports the
+# original settings and flips only that value (tests/beat-logging.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: celery-log-override
+  namespace: shopping
+data:
+  celery_log_override.py: |
+    from myproject.settings import *  # noqa: F401, F403
+
+    LOGGING["loggers"]["celery"]["propagate"] = True  # noqa: F405
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -42,6 +58,17 @@ spec:
                 name: shopping-config
             - secretRef:
                 name: shopping-secret
+          env:
+            - name: DJANGO_SETTINGS_MODULE
+              value: celery_log_override
+          volumeMounts:
+            - name: celery-log-override
+              mountPath: /code/celery_log_override.py
+              subPath: celery_log_override.py
+      volumes:
+        - name: celery-log-override
+          configMap:
+            name: celery-log-override
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -87,6 +114,17 @@ spec:
                 name: shopping-config
             - secretRef:
                 name: shopping-secret
+          env:
+            - name: DJANGO_SETTINGS_MODULE
+              value: celery_log_override
+          volumeMounts:
+            - name: celery-log-override
+              mountPath: /code/celery_log_override.py
+              subPath: celery_log_override.py
+      volumes:
+        - name: celery-log-override
+          configMap:
+            name: celery-log-override
 ---
 # Beat stays at one replica so scheduled tasks are not sent twice.
 apiVersion: apps/v1
@@ -144,3 +182,14 @@ spec:
                 name: shopping-config
             - secretRef:
                 name: shopping-secret
+          env:
+            - name: DJANGO_SETTINGS_MODULE
+              value: celery_log_override
+          volumeMounts:
+            - name: celery-log-override
+              mountPath: /code/celery_log_override.py
+              subPath: celery_log_override.py
+      volumes:
+        - name: celery-log-override
+          configMap:
+            name: celery-log-override

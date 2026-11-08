@@ -47,6 +47,7 @@ bash deploy.sh
 | 같은 조건, DB 대기 init 컨테이너 | `Init:0/1`로 대기, 재시작 0, DB가 돌아오자 바로 시작 (1회) |
 | 모든 Pod에 requests/limits | PostgreSQL `Guaranteed`, 나머지 `Burstable`. DB 교체 중 Beat 오류 로그 1건, 재시작 0 |
 | DB 연결 거부로 Beat 시작, `celery` logger `propagate`만 다르게 | False: 오류 줄 없음 / True: `CRITICAL ... OperationalError` 1줄 (1회, [tests/beat-logging.yaml](tests/beat-logging.yaml)) |
+| 워커·Beat에 `propagate: True` 적용, Redis Pod 삭제 | 작업 `received`·`succeeded`, Beat `Sending due task` 줄이 생김(중복 0). 끊김·재시도·다시 연결 줄이 보이고 45초·74초 뒤 다시 연결, 재시작 0 (1회) |
 
 ## 알려진 문제
 
