@@ -1,0 +1,75 @@
+# Does Beat log its startup DB error when the "celery" logger propagates?
+# The shopping repository is frozen, so the change is made only in this test:
+# a settings module mounted from this ConfigMap imports the original settings
+# and flips one value.
+#
+# Both pods point DATABASE_HOST at 127.0.0.1 (nothing listens there), so Beat
+# fails at start like it does when PostgreSQL is down. They can never reach
+# the real DB, so they cannot send scheduled tasks twice.
+#
+# Start: kubectl apply -f tests/beat-logging.yaml
+# Stop:  kubectl delete -f tests/beat-logging.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beat-log-override
+  namespace: shopping
+data:
+  beat_log_override.py: |
+    from myproject.settings import *  # noqa: F401, F403
+
+    LOGGING["loggers"]["celery"]["propagate"] = True  # noqa: F405
+---
+# Original settings (celery logger propagate: False)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: beat-log-original
+  namespace: shopping
+spec:
+  restartPolicy: Never
+  containers:
+    - name: beat
+      image: shopping:9836d194
+      imagePullPolicy: Never
+      command: [celery, -A, myproject, beat, -l, info, --scheduler, "django_celery_beat.schedulers:DatabaseScheduler"]
+      envFrom:
+        - configMapRef:
+            name: shopping-config
+        - secretRef:
+            name: shopping-secret
+      env:
+        - name: DATABASE_HOST
+          value: 127.0.0.1
+---
+# Same, with propagate: True
+apiVersion: v1
+kind: Pod
+metadata:
+  name: beat-log-propagate
+  namespace: shopping
+spec:
+  restartPolicy: Never
+  containers:
+    - name: beat
+      image: shopping:9836d194
+      imagePullPolicy: Never
+      command: [celery, -A, myproject, beat, -l, info, --scheduler, "django_celery_beat.schedulers:DatabaseScheduler"]
+      envFrom:
+        - configMapRef:
+            name: shopping-config
+        - secretRef:
+            name: shopping-secret
+      env:
+        - name: DATABASE_HOST
+          value: 127.0.0.1
+        - name: DJANGO_SETTINGS_MODULE
+          value: beat_log_override
+      volumeMounts:
+        - name: override
+          mountPath: /code/beat_log_override.py
+          subPath: beat_log_override.py
+  volumes:
+    - name: override
+      configMap:
+        name: beat-log-override

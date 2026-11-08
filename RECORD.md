@@ -86,6 +86,12 @@
   - Redis 매니페스트에 볼륨이 없어, Pod가 바뀌면 대기열과 처리 중 작업이 함께 사라진다. 쇼핑몰 작업 다수가 `acks_late=True`(build/src에서 확인)지만, 이는 워커가 죽는 경우를 위한 것이라 브로커 데이터 손실은 막지 못한다. 이번에는 21:31~21:35 사이 예정 작업이 없어 잃은 작업은 없었고, 일부러 시험하지 않았다. 롤링 업데이트 중 옛·새 Redis가 잠깐 함께 Service 뒤에 있는 점도 같은 문제다.
   - PostgreSQL 교체: 새 `postgres-0` 시작 21:59:06. Beat 로그 21:59:10 `ERROR ... Database gave error: OperationalError(... Connection refused)` 1건, Beat 재시작 0. 워커는 22:00부터 5분마다 주기 작업을 계속 처리. API는 재시작 0(DB를 쓰는 요청의 그 사이 결과는 재지 않음). 교체 뒤 `/api/products/` 200(테이블 유지, 상품 0개라 행 유지는 확인 못 함).
   - 같은 요청 응답에 `Server-Timing`(Debug Toolbar 패널, SQL 5.7ms, 전체 510ms)과 `djdt-request-id` 헤더. ConfigMap `DJANGO_ENV: local`(11-06 배포 때 Claude Code가 정함) → `local.py`의 `DEBUG = True`와 Debug Toolbar. 툴바는 `INTERNAL_IPS`(Pod IP 끝자리를 `.1`로 바꾼 주소)일 때만 켜지는데, 요청이 Service를 거쳐 보낸 Pod 자신에게 돌아가 출발지가 `10.1.0.1`이 됐다고 추정한다(확인 안 함). 18:13 응답에는 이 헤더가 없었다. 로컬이라 외부 노출은 없다.
+- 2026-11-08 Beat 시작 오류가 로그에 남는지, `celery` logger `propagate`만 바꿔 같은 조건 비교(명령 입력과 출력 확인은 사용자, 시험 파일 작성과 해석 설명은 Claude Code, `tests/beat-logging.yaml`):
+  - 쇼핑몰 저장소는 고치지 않았다. `celery.py`가 `DJANGO_SETTINGS_MODULE`을 `setdefault`로 정하므로, ConfigMap으로 넣은 `beat_log_override.py`(원래 설정 전부를 가져온 뒤 `LOGGING["loggers"]["celery"]["propagate"] = True`)를 환경 변수로 지정했다.
+  - 두 Pod 모두 `DATABASE_HOST=127.0.0.1`(연결 거부), init 컨테이너 없음, `restartPolicy: Never`.
+  - `beat-log-original`(원래 설정): 시작 안내(`celery beat v5.7.0 ... is starting`, `logfile -> [stderr]@%INFO`)까지만 나오고 오류 줄 없음.
+  - `beat-log-propagate`: `23:02:40,878 CRITICAL/MainProcess beat raised exception <class 'django.db.utils.OperationalError'>: ... 127.0.0.1, port 5432 failed: Connection refused` 1줄, 이어서 traceback이 조각(`^`, `django.db.utils`, `.` 등)마다 `WARNING/MainProcess` 한 줄씩. 조각나는 이유는 Celery가 stderr를 로그로 바꾸는 동작으로 추정(코드 미확인).
+  - 11-07 재현(Claude Code, 포트 오류·timeout)과 달리 이번은 실제 장애와 같은 connection refused다. 1회 시험.
 
 ## 돌려 보지 않은 것
 
