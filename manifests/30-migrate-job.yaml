@@ -10,8 +10,8 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrate
-          image: shopping:9836d194
-          imagePullPolicy: Never
+          image: localhost:5000/shopping:9836d194
+          imagePullPolicy: IfNotPresent
           command: [python, manage.py, migrate, --noinput]
           envFrom:
             - configMapRef:

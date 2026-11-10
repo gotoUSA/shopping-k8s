@@ -14,8 +14,9 @@ run() { echo "\$ $*"; "$@" 2>&1; echo; }
 {
   echo "\$ kubectl -n $NS run load ... (request /health/ every 0.1s, print http_code and curl exit code)"
   kubectl -n $NS delete pod load --ignore-not-found >/dev/null 2>&1
-  kubectl -n $NS run load --restart=Never --image=shopping:9836d194 --image-pull-policy=Never --command -- \
-    sh -c 'while true; do curl -s -o /dev/null -w "%{http_code} %{exitcode}\n" --max-time 5 http://shopping-api:8000/health/; sleep 0.1; done' 2>&1
+  # Production settings redirect plain HTTP, so send the header the Gateway would.
+  kubectl -n $NS run load --restart=Never --image=localhost:5000/shopping:9836d194 --command -- \
+    sh -c 'while true; do curl -s -o /dev/null -w "%{http_code} %{exitcode}\n" --max-time 5 -H "X-Forwarded-Proto: https" http://shopping-api:8000/health/; sleep 0.1; done' 2>&1
   kubectl -n $NS wait --for=condition=Ready pod/load --timeout=60s >/dev/null 2>&1
   sleep 8
   echo

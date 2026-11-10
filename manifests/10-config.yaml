@@ -4,7 +4,9 @@ metadata:
   name: shopping-config
   namespace: shopping
 data:
-  DJANGO_ENV: local
+  # production: DEBUG off, HTTPS redirect, secure cookies (myproject/settings/production.py).
+  DJANGO_ENV: production
+  CSRF_TRUSTED_ORIGINS: https://localhost
   DEPLOYMENT_ENV: staging
   DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,shopping-api
   DATABASE_ENGINE: django.db.backends.postgresql

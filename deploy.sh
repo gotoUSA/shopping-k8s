@@ -4,7 +4,16 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 IMAGE=shopping:9836d194
+REGISTRY=localhost:5000
 gen() { docker run --rm --entrypoint python "$IMAGE" -c "$1" | tr -d '\r'; }
+
+# Local registry (container on 127.0.0.1:5000); the cluster pulls from it.
+if ! docker ps --format '{{.Names}}' | grep -qx registry; then
+  docker start registry 2>/dev/null ||
+    docker run -d -p 127.0.0.1:5000:5000 -v shopping-registry:/var/lib/registry --name registry registry:3.1.2
+fi
+docker tag "$IMAGE" "$REGISTRY/$IMAGE"
+docker push "$REGISTRY/$IMAGE"
 
 kubectl apply -f manifests/00-namespace.yaml
 if ! kubectl -n shopping get secret shopping-secret >/dev/null 2>&1; then
@@ -16,6 +25,13 @@ if ! kubectl -n shopping get secret shopping-secret >/dev/null 2>&1; then
     --from-literal=ENCRYPTION_KEY="$EK" \
     --from-literal=DATABASE_PASSWORD="$PW" >/dev/null
   echo "secret created"
+fi
+if ! kubectl -n shopping get secret shopping-tls >/dev/null 2>&1; then
+  TMP=$(mktemp -d)
+  MSYS_NO_PATHCONV=1 openssl req -x509 -newkey rsa:2048 -nodes -days 365 -subj "/CN=localhost"     -addext "subjectAltName=DNS:localhost" -keyout "$TMP/tls.key" -out "$TMP/tls.crt" 2>/dev/null
+  kubectl -n shopping create secret tls shopping-tls --cert="$TMP/tls.crt" --key="$TMP/tls.key" >/dev/null
+  rm -rf "$TMP"
+  echo "tls secret created"
 fi
 
 kubectl apply -f manifests/10-config.yaml -f manifests/20-postgres.yaml -f manifests/21-redis.yaml
@@ -35,4 +51,8 @@ kubectl -n shopping rollout status deployment/shopping-api --timeout=200s
 
 kubectl apply -f addons/metrics-server-v0.9.1.yaml
 kubectl apply -f manifests/60-api-hpa.yaml
+
+kubectl apply --server-side -f addons/envoy-gateway-v1.9.3-install.yaml >/dev/null
+kubectl -n envoy-gateway-system wait --for=condition=Available deployment/envoy-gateway --timeout=300s
+kubectl apply -f manifests/70-gateway.yaml
 kubectl -n shopping get pods

@@ -17,8 +17,8 @@ spec:
       terminationGracePeriodSeconds: 45
       containers:
         - name: api
-          image: shopping:9836d194
-          imagePullPolicy: Never
+          image: localhost:5000/shopping:9836d194
+          imagePullPolicy: IfNotPresent
           # Keep listening while Service rules stop sending new connections.
           lifecycle:
             preStop:
@@ -42,6 +42,9 @@ spec:
             - secretRef:
                 name: shopping-secret
           # Probes reach the pod by IP, which ALLOWED_HOSTS rejects, so set Host.
+          # Production settings redirect plain HTTP to HTTPS with a 301, and a
+          # probe counts any 200-399 as success, so without X-Forwarded-Proto the
+          # probe passed on the redirect and /health/ never ran (2026-11-11).
           startupProbe:
             httpGet:
               path: /health/
@@ -49,6 +52,8 @@ spec:
               httpHeaders:
                 - name: Host
                   value: localhost
+                - name: X-Forwarded-Proto
+                  value: https
             periodSeconds: 5
             failureThreshold: 36
           readinessProbe:
@@ -58,6 +63,8 @@ spec:
               httpHeaders:
                 - name: Host
                   value: localhost
+                - name: X-Forwarded-Proto
+                  value: https
             periodSeconds: 5
           livenessProbe:
             httpGet:
@@ -66,6 +73,8 @@ spec:
               httpHeaders:
                 - name: Host
                   value: localhost
+                - name: X-Forwarded-Proto
+                  value: https
             periodSeconds: 10
 ---
 apiVersion: v1

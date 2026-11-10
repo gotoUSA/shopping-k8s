@@ -31,8 +31,8 @@ spec:
     spec:
       containers:
         - name: worker
-          image: shopping:9836d194
-          imagePullPolicy: Never
+          image: localhost:5000/shopping:9836d194
+          imagePullPolicy: IfNotPresent
           command:
             - celery
             - -A
@@ -87,8 +87,8 @@ spec:
     spec:
       containers:
         - name: worker
-          image: shopping:9836d194
-          imagePullPolicy: Never
+          image: localhost:5000/shopping:9836d194
+          imagePullPolicy: IfNotPresent
           command:
             - celery
             - -A
@@ -148,8 +148,8 @@ spec:
       # with code 1 if the DB is down at start. Wait for the DB first.
       initContainers:
         - name: wait-for-db
-          image: shopping:9836d194
-          imagePullPolicy: Never
+          image: localhost:5000/shopping:9836d194
+          imagePullPolicy: IfNotPresent
           command:
             - sh
             - -c
@@ -159,8 +159,8 @@ spec:
                 name: shopping-config
       containers:
         - name: beat
-          image: shopping:9836d194
-          imagePullPolicy: Never
+          image: localhost:5000/shopping:9836d194
+          imagePullPolicy: IfNotPresent
           command:
             - celery
             - -A
