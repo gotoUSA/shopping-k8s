@@ -1,0 +1,36 @@
+# Cluster
+$ kubectl get nodes (name, kubelet, runtime)
+NAME                     VERSION    RUNTIME
+shopping-control-plane   v1.34.11   containerd://2.3.4
+$ kubectl -n kube-system logs ds/kindnet | grep kube-network-policies
+I1111 09:03:27.340358       1 controller.go:173] "Starting controller" name="kube-network-policies"
+
+# 1. Without the policy (2026-11-11 18:12:28)
+networkpolicy.networking.k8s.io "shopping-api-from-gateway" deleted from shopping namespace
+-- from celery-main (namespace shopping)
+   ['Host'] -> 301 https://localhost/health/
+   ['Host', 'X-Forwarded-Proto'] -> 200 {"status": "ok"}
+-- from pod forge (namespace default)
+   ['Host'] -> 301 https://localhost/health/
+   ['Host', 'X-Forwarded-Proto'] -> 200 {"status": "ok"}
+
+# 2. With the policy (2026-11-11 18:12:31)
+networkpolicy.networking.k8s.io/shopping-api-from-gateway created
+-- from celery-main (namespace shopping)
+   ['Host'] -> TimeoutError timed out
+   ['Host', 'X-Forwarded-Proto'] -> TimeoutError timed out
+-- from pod forge (namespace default)
+   ['Host'] -> TimeoutError timed out
+   ['Host', 'X-Forwarded-Proto'] -> TimeoutError timed out
+-- through the Gateway (host)
+$ curl -sk https://localhost:8443/health/
+{"status": "ok"}  [200]
+$ curl -sk -o /dev/null -w '%{http_code}' https://localhost:8443/api/products/
+200
+
+# 3. Kubelet probes, 90s with the policy (2026-11-11 18:14:26)
+NAME                            READY   RESTARTS
+shopping-api-69896b69b7-gm7fm   true    0
+shopping-api-69896b69b7-xbdd9   true    0
+pod/shopping-api-69896b69b7-gm7fm: kube-probe requests in the last 90s: 27, non-200: 0
+pod/shopping-api-69896b69b7-xbdd9: kube-probe requests in the last 90s: 27, non-200: 0

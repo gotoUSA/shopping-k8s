@@ -9,7 +9,7 @@
 | 날짜 | 2026-11-06 |
 | 코드 | `gotoUSA/selfhealing` 커밋 `9836d194` (`build/src`에 `git archive`로 복사) |
 | 이미지 | `shopping:9836d194`, 1.97GB, 저장소의 `Dockerfile` 그대로 |
-| 클러스터 | Docker Desktop Kubernetes, 노드 1개, v1.34.1 |
+| 클러스터 | Docker Desktop Kubernetes(kubeadm), 노드 1개, v1.34.1. 2026-11-11 NetworkPolicy 시험부터 kind v0.33.0, 노드 1개, v1.34.11 |
 | 올린 것 | PostgreSQL, Redis, 마이그레이션 Job, API, Celery 워커 2종, Beat |
 | 실행 | 매니페스트 작성과 명령 실행은 Claude Code가 했다. 범위 판단은 사용자와 함께 했다. |
 
@@ -122,6 +122,13 @@
   - Gateway API: Ingress NGINX는 저장소가 보관 처리됐고 마지막 릴리스가 2026-03-19라, Envoy Gateway v1.9.3(`addons/envoy-gateway-v1.9.3-install.yaml`, `--server-side`)과 `manifests/70-gateway.yaml`(GatewayClass, Gateway의 HTTP 80·HTTPS 443, HTTPRoute `localhost` → `shopping-api:8000`)을 썼다. 인증서는 `openssl`로 만든 자체 서명(`CN=localhost`), Secret `shopping-tls`. Docker Desktop이 Envoy의 LoadBalancer Service를 `localhost:80/443`에 열었다.
   - Windows에서 요청: `http://localhost/health/` → `301 https://localhost/health/`, `https://localhost/health/` → 200, `/api/products/` → 200 JSON, 없는 주소 → 짧은 404(디버그 화면 아님), 응답에 HSTS·`X-Frame-Options: DENY`·`nosniff`, `Host: example.com` → 404(Gateway가 경로 규칙에 없는 호스트를 거부).
   - NetworkPolicy(`manifests/80-networkpolicy.yaml`, API Pod의 8000번에는 이 Gateway의 Envoy Pod만 들어오게): 다른 Pod에서 `X-Forwarded-Proto: https`를 붙여 `shopping-api:8000/health/`로 직접 보낸 요청이 적용 전 200, 적용 뒤에도 200. Docker Desktop의 기본 네트워크에는 NetworkPolicy를 집행하는 플러그인(Calico, Cilium 등)이 없어 정책이 등록만 되고 효과가 없다. 1회.
+- 2026-11-11 kind로 옮겨 NetworkPolicy 집행 확인(Claude Code가 설치·명령 실행, 결과는 단계마다 사용자 확인. 실행 화면 `evidence/05-networkpolicy.txt`):
+  - 클러스터: Docker Desktop 설정에서 바꾸는 대신 kind CLI v0.33.0(체크섬 확인)으로 `kind/cluster.yaml` 클러스터를 따로 만들었다. 기존 Docker Desktop 클러스터는 지우지 않았다. 노드 이미지는 이전 클러스터·kubectl과 같은 1.34 계열 `kindest/node:v1.34.11`(digest 고정). kindnet 로그에 `"Starting controller" name="kube-network-policies"`, `Policy engine is ready`.
+  - 레지스트리: kind 노드 안의 `localhost`는 노드 자신이라 `localhost:5000`이 레지스트리를 가리키지 않는다. 처음 만든 클러스터는 containerd `config_path`가 비어 있어 미러 설정을 읽지 않았다 → `containerdConfigPatches`로 `/etc/containerd/certs.d`를 지정해 다시 만들고, 레지스트리 컨테이너를 `kind` 네트워크에 연결, 노드에 `certs.d/localhost:5000/hosts.toml`(`http://registry:5000`)을 썼다. 노드에서 `crictl pull localhost:5000/shopping:9836d194` 성공. 매니페스트의 이미지 주소는 바꾸지 않았다.
+  - Gateway: kind에는 LoadBalancer가 없어 `EnvoyProxy`로 Envoy Service를 NodePort 30080/30443으로 고정하고 Gateway에 연결, kind가 호스트 `127.0.0.1:8080/8443`에 연결. 기존 Docker Desktop 클러스터의 Envoy가 80/443을 쓰고 있어 다른 포트를 골랐다. `https://localhost:8443/health/` 200, `/api/products/` 200 JSON.
+  - `deploy.sh`를 빈 클러스터에서 처음 돌리자 TLS 인증서 단계에서 오류 메시지 없이 끝났다. Git Bash에서 `-subj`를 지키려고 켠 `MSYS_NO_PATHCONV=1` 때문에 Windows용 `openssl`이 `/tmp/...` 경로를 못 찾았고, 오류는 `2>/dev/null`이 숨겼다. 이전 클러스터에는 Secret `shopping-tls`가 이미 있어 이 분기가 실행된 적이 없었다. `cygpath -m`으로 바꾼 경로를 넘기게 고친 뒤 빈 클러스터에서 끝까지 실행(1분 47초, Pod 8개 Running/Completed).
+  - NetworkPolicy: 같은 네임스페이스의 `celery-main`과 default 네임스페이스의 Pod `forge`(같은 이미지)에서 `shopping-api.shopping.svc:8000/health/`로 직접 요청. 정책 없음: 헤더 없이 301, `X-Forwarded-Proto: https`를 붙이면 200. 정책 적용 3초 뒤: 두 Pod 모두 헤더와 상관없이 5초 시간 초과. 같은 때 Gateway 경유 `https://localhost:8443/health/`·`/api/products/` 200. 정책을 켠 채 90초 동안 API Pod 2개 Ready, 재시작 0, kubelet 검사(노드 주소 `10.244.0.1`에서 옴) Pod마다 27건 모두 200. 3회(1회는 명령을 하나씩, 2·3회는 `tests/networkpolicy-forge.sh`, 결과 같음). 이후 `deploy.sh`가 정책을 함께 적용한다.
+  - 포트를 8080/8443으로 옮기면서 `http://localhost:8080/health/` → `301 https://localhost:8080/health/`가 됐다. Django가 받은 Host의 포트를 그대로 두고 https로만 바꾸기 때문이고, 8080은 HTTP 포트라 이 주소는 열리지 않는다. 80/443이던 이전 클러스터에서는 맞았다. 고치지 않았다.
 
 ## 돌려 보지 않은 것
 

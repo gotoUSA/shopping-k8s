@@ -2,13 +2,35 @@
 # Envoy Gateway (addons/envoy-gateway-v1.9.3-install.yaml).
 # Not an Ingress: the Ingress NGINX repository is archived (last release
 # 2026-03-19), and the Gateway API is the maintained successor.
-# Docker Desktop exposes the Envoy LoadBalancer Service on localhost:80/443.
+# kind has no LoadBalancer, so the Envoy Service is a NodePort on fixed ports
+# that kind/cluster.yaml maps to the host: localhost:8080 (HTTP), :8443 (HTTPS).
 apiVersion: gateway.networking.k8s.io/v1
 kind: GatewayClass
 metadata:
   name: envoy
 spec:
   controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: nodeport
+  namespace: shopping
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: NodePort
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports:
+                - port: 80
+                  nodePort: 30080
+                - port: 443
+                  nodePort: 30443
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -17,6 +39,11 @@ metadata:
   namespace: shopping
 spec:
   gatewayClassName: envoy
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: nodeport
   listeners:
     - name: http
       protocol: HTTP

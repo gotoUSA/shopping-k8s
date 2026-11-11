@@ -12,14 +12,15 @@ Django 쇼핑몰 API([gotoUSA/selfhealing](https://github.com/gotoUSA/selfhealin
 | 요청을 보내며 버전 교체 | [PNG](evidence/02-rolling-update.png) | [txt](evidence/02-rolling-update.txt) |
 | API·워커 로그 | [PNG](evidence/03-logs.png) | [txt](evidence/03-logs.txt) |
 | 레지스트리, 운영 설정, Gateway | [PNG](evidence/04-registry-gateway.png) | [txt](evidence/04-registry-gateway.txt) |
+| NetworkPolicy 적용 전후 위조 요청 (kind) | [PNG](evidence/05-networkpolicy.png) | [txt](evidence/05-networkpolicy.txt) |
 
-PNG는 실제 명령 출력을 `evidence/render.py`로 그린 이미지입니다. `evidence/capture.sh`, `evidence/capture-gateway.sh`로 다시 만들 수 있습니다.
+PNG는 실제 명령 출력을 `evidence/render.py`로 그린 이미지입니다. `evidence/capture.sh`, `evidence/capture-gateway.sh`, `tests/networkpolicy-forge.sh`로 다시 만들 수 있습니다. 01~04는 Docker Desktop 클러스터(`https://localhost`)에서, 05는 kind 클러스터에서 찍었습니다.
 
 ## 구성
 
-- 클러스터: Docker Desktop Kubernetes, 노드 1개
-- 이미지: 쇼핑몰 저장소의 [Dockerfile](https://github.com/gotoUSA/selfhealing/blob/9836d194/Dockerfile)로 빌드해 로컬 레지스트리(`registry:3.1.2` 컨테이너, `localhost:5000`)에 올리고, 클러스터는 거기서 받음
-- 올린 것: PostgreSQL, Redis, 마이그레이션 Job, API(HPA로 2~6개), Celery 워커 2종, Beat 1개, metrics-server, Envoy Gateway(Gateway API, `https://localhost`)
+- 클러스터: kind v0.33.0, 노드 1개, Kubernetes v1.34.11([kind/cluster.yaml](kind/cluster.yaml)). 2026-11-11 이전 시험은 Docker Desktop Kubernetes(kubeadm, v1.34.1)에서 했고, 그 네트워크가 NetworkPolicy를 집행하지 않아 kind(kindnet이 집행)로 옮겼습니다.
+- 이미지: 쇼핑몰 저장소의 [Dockerfile](https://github.com/gotoUSA/selfhealing/blob/9836d194/Dockerfile)로 빌드해 로컬 레지스트리(`registry:3.1.2` 컨테이너, `localhost:5000`)에 올리고, 클러스터는 거기서 받음. kind 노드 안에서는 `localhost:5000`을 containerd 미러 설정으로 레지스트리 컨테이너에 연결
+- 올린 것: PostgreSQL, Redis, 마이그레이션 Job, API(HPA로 2~6개), Celery 워커 2종, Beat 1개, metrics-server, Envoy Gateway(Gateway API, `https://localhost:8443`), NetworkPolicy(API에는 Envoy만)
 - 설정: 쇼핑몰 운영 설정(`DJANGO_ENV: production`, `DEBUG` 꺼짐, HTTPS 리다이렉트). TLS는 Gateway에서 끝내고 자체 서명 인증서 사용
 - 비밀값: `deploy.sh`가 생성해 클러스터 Secret에만 저장
 
@@ -29,6 +30,7 @@ PNG는 실제 명령 출력을 `evidence/render.py`로 그린 이미지입니다
 git clone https://github.com/gotoUSA/selfhealing.git build/src
 git -C build/src checkout 9836d194
 docker build -t shopping:9836d194 build/src
+kind create cluster --config kind/cluster.yaml
 bash deploy.sh
 ```
 
@@ -57,10 +59,12 @@ bash deploy.sh
 | 운영 설정에서 검사 요청 | 헤더 없이 `301`(검사는 성공으로 봄, `/health/` 실행 안 됨) → `X-Forwarded-Proto: https`를 넣어 200 |
 | Gateway로 요청 | HTTP → 301 HTTPS, HTTPS `/health/`·`/api/products/` 200, 다른 호스트 404 |
 | 볼륨 + appendonly, `kill -9` | 6 → 6건. 시험 중 appendonly를 끄고 다시 켰을 때 오래된 빈 기록을 읽어 2 → 0건 ([출력](evidence/redis-persistence.txt), 각 1회) |
+| 다른 Pod에서 API로 직접 `X-Forwarded-Proto: https` 요청 | Docker Desktop: NetworkPolicy 적용 전후 모두 200(집행 안 됨, 1회). kind: 적용 전 200 → 적용 뒤 시간 초과, Gateway 경유 200, kubelet 검사 모두 200·재시작 0 (3회, [tests/networkpolicy-forge.sh](tests/networkpolicy-forge.sh)) |
 
 ## 알려진 문제
 
-- 장고가 `X-Forwarded-Proto` 헤더를 믿기 때문에, 클러스터 안에서 API Pod로 직접 이 헤더를 붙여 보내면 HTTPS 요청으로 취급됩니다. Gateway의 Envoy만 API에 들어오게 하는 NetworkPolicy(`manifests/80-networkpolicy.yaml`)를 넣었지만, Docker Desktop 기본 네트워크는 NetworkPolicy를 집행하지 않아 적용 전후 모두 위조 요청이 200이었습니다.
+- 장고가 `X-Forwarded-Proto` 헤더를 믿습니다. 그래서 Gateway의 Envoy만 API Pod에 들어오게 하는 NetworkPolicy(`manifests/80-networkpolicy.yaml`)를 둡니다. 정책을 집행하는 네트워크(kind의 kindnet 등)에서만 효과가 있고, Docker Desktop 기본 네트워크에서는 효과가 없었습니다.
+- HTTP를 8080에 열어서, `http://localhost:8080/` 리다이렉트가 `https://localhost:8080/`(HTTP 포트)으로 갑니다. HTTPS는 `https://localhost:8443/`으로 직접 엽니다.
 - 인증서는 자체 서명이라 브라우저가 경고합니다.
 - Redis는 1개뿐입니다. 볼륨과 appendonly(`everysec`)로 교체·갑작스러운 종료 뒤에도 대기열이 남지만, Redis가 내려가 있는 동안은 작업을 보낼 수 없습니다.
 
