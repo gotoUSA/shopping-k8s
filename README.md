@@ -62,7 +62,7 @@ bash deploy.sh   # Helm 4 필요(v4.3.1에서 확인). 다시 돌리면 helm upg
 | Gateway로 요청 | HTTP → 301 HTTPS, HTTPS `/health/`·`/api/products/` 200, 다른 호스트 404 |
 | 볼륨 + appendonly, `kill -9` | 6 → 6건. 시험 중 appendonly를 끄고 다시 켰을 때 오래된 빈 기록을 읽어 2 → 0건 ([출력](evidence/redis-persistence.txt), 각 1회) |
 | kubectl로 올린 리소스를 Helm으로 넘겨받기 | `--take-ownership`만: server-side apply 필드 충돌로 실패 → `--force-conflicts`: `generation` 변화 없음, Pod 재시작 0 (1회) |
-| `helm upgrade`(이미지 교체) → `helm rollback` | Deployment 4개 교체 후 되돌림, 새 revision으로 기록. 마이그레이션 hook은 rollback 때 돌지 않음 (1회) |
+| `helm upgrade`(이미지 교체) → `helm rollback` | Deployment 4개 교체 후 되돌림, 새 revision으로 기록. 마이그레이션은 교체 전에 끝남(완료 1초 뒤 새 ReplicaSet), rollback 때는 돌지 않음. 교체 중 요청 99건·되돌리는 중 31건 모두 200 (각 1회, 초당 약 1.5건이라 근거로 약함) |
 | 빈 클러스터에서 Helm으로 `deploy.sh` | 처음: Beat가 마이그레이션 전에 떠서 재시작 1번. Beat가 마이그레이션을 기다리게 하자 `--wait`와 서로 기다려 10분 시간 초과. `--wait=hookOnly`로 바꿔 4분 17초, 재시작 0. 다시 돌리면 upgrade 17초, Pod 교체 없음 (각 1회) |
 | 다른 Pod에서 API로 직접 `X-Forwarded-Proto: https` 요청 | Docker Desktop: NetworkPolicy 적용 전후 모두 200(집행 안 됨, 1회). kind: 적용 전 200 → 적용 뒤 시간 초과, Gateway 경유 200, kubelet 검사 모두 200·재시작 0 (3회, [tests/networkpolicy-forge.sh](tests/networkpolicy-forge.sh)) |
 

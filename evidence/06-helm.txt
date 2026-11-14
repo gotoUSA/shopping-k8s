@@ -247,3 +247,72 @@ postgres-0                        1/1     Running     0          4m38s
 redis-0                           1/1     Running     0          4m38s
 shopping-api-69896b69b7-qcc4g     1/1     Running     0          4m16s
 shopping-api-69896b69b7-vhzww     1/1     Running     0          4m38s
+
+======== 19:58 upgrade to mytest with the new chart (GET /health/ through the Gateway every ~0.2s+curl time during the run)
+$ helm upgrade shopping chart -n shopping --set image.tag=mytest --wait=hookOnly --timeout 10m
+19:58:46
+STATUS: deployed
+REVISION: 3
+Release shopping (revision 3), image localhost:5000/shopping:mytest.
+
+real	0m29.306s
+user	0m0.031s
+sys	0m0.030s
+Waiting for deployment "shopping-api" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "shopping-api" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "shopping-api" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "shopping-api" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "shopping-api" rollout to finish: 1 old replicas are pending termination...
+deployment "shopping-api" successfully rolled out
+deployment "celery-main" successfully rolled out
+deployment "celery-external" successfully rolled out
+deployment "celery-beat" successfully rolled out
+19:59:52
+$ kubectl -n shopping get job migrate  (image, start, done)
+migrate localhost:5000/shopping:mytest start=2026-11-14T10:58:47Z done=2026-11-14T10:59:13Z
+$ kubectl -n shopping get rs (created, image)
+celery-external-84bbb76946   2026-11-14T10:59:14Z   localhost:5000/shopping:mytest
+celery-main-67769fb654       2026-11-14T10:59:14Z   localhost:5000/shopping:mytest
+shopping-api-89bc6c5ff       2026-11-14T10:59:14Z   localhost:5000/shopping:mytest
+celery-beat-65fc454cb6       2026-11-14T10:59:16Z   localhost:5000/shopping:mytest
+requests 19:58:46-19:59:53:
+     99 200
+
+======== 20:00 rollback to revision 2
+$ helm rollback shopping 2 -n shopping --wait --timeout 10m
+20:00:10
+Rollback was a success! Happy Helming!
+
+real	0m17.652s
+user	0m0.000s
+sys	0m0.031s
+20:00:28
+requests 20:00:10-20:00:28 (stopped when the last old pod began terminating; its 10s preStop is not covered):
+     31 200
+$ kubectl -n shopping get deploy (image)
+NAME              IMAGE
+celery-beat       localhost:5000/shopping:9836d194
+celery-external   localhost:5000/shopping:9836d194
+celery-main       localhost:5000/shopping:9836d194
+shopping-api      localhost:5000/shopping:9836d194
+$ kubectl -n shopping get job migrate (image)
+localhost:5000/shopping:mytest
+$ kubectl -n shopping get rs (shopping-api)
+shopping-api-69896b69b7      2         localhost:5000/shopping:9836d194
+shopping-api-89bc6c5ff       0         localhost:5000/shopping:mytest
+$ helm history shopping -n shopping
+REVISION	UPDATED                 	STATUS    	CHART         	APP VERSION	DESCRIPTION     
+1       	Sat Nov 14 19:39:25 2026	superseded	shopping-0.1.0	9836d194   	Install complete
+2       	Sat Nov 14 19:43:25 2026	superseded	shopping-0.1.0	9836d194   	Upgrade complete
+3       	Sat Nov 14 19:58:46 2026	superseded	shopping-0.1.0	9836d194   	Upgrade complete
+4       	Sat Nov 14 20:00:11 2026	deployed  	shopping-0.1.0	9836d194   	Rollback to 2   
+$ kubectl -n shopping get pods
+NAME                              READY   STATUS      RESTARTS   AGE
+celery-beat-549b8844db-h9t29      1/1     Running     0          41s
+celery-external-5964d665d-jx2sm   1/1     Running     0          44s
+celery-main-5b9444594b-z8ztz      1/1     Running     0          44s
+migrate-wfnml                     0/1     Completed   0          2m8s
+postgres-0                        1/1     Running     0          21m
+redis-0                           1/1     Running     0          21m
+shopping-api-69896b69b7-lsnbn     1/1     Running     0          44s
+shopping-api-69896b69b7-nl69v     1/1     Running     0          33s

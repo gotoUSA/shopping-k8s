@@ -148,7 +148,10 @@
   - 3차: `--wait=hookOnly`(Helm 4에서 플래그를 안 줄 때 기본값. 리소스를 만든 뒤 hook만 기다림) + migrate Job에 DB 대기 init 컨테이너 + Helm 뒤에 `kubectl rollout status`로 Deployment 4개·StatefulSet 2개 확인. exit 0, 4분 17초, 모든 Pod 재시작 0. migrate Job의 DB 대기 `no response` 25줄 뒤 마이그레이션 적용, Beat는 `waiting for migrations` 4번 뒤 Job 완료와 같은 초(10:42:39)에 시작. Gateway `/health/`·`/api/products/` 200, `kubectl top` 응답, HPA 2개, `celery-main`에서 API로 직접 보낸 위조 요청 5초 시간 초과(NetworkPolicy 집행).
   - 같은 `deploy.sh`를 다시 실행: upgrade(revision 2) 17초, pre-upgrade migrate `No migrations to apply.`, Pod 교체 없음.
   - `tests/helm-template-diff.py`: 18개 중 16개 같음. 다른 2개 = migrate Job(hook 주석, DB 대기 init), Beat init(마이그레이션 대기, `shopping-secret` 추가). `manifests/`는 Helm 전 판으로 남기고 배포에 쓰지 않는다.
-  - 이미지를 바꾸는 upgrade와 rollback은 이 새 `deploy.sh`·차트로는 다시 하지 않았다(앞 항목의 시험은 init 변경 전 차트).
+- 2026-11-14 새 차트로 이미지 교체·되돌리기 재시험(Helm 전환 커밋 뒤 Claude Code 실행. 실행 중 Gateway 경유 `GET /health/`를 계속 보냄, 실행 화면 `evidence/06-helm.txt` 끝):
+  - upgrade(revision 3): `helm upgrade --set image.tag=mytest --wait=hookOnly` 29초 + `rollout status` 4개, 19:58:46~19:59:52. pre-upgrade migrate Job(`mytest`)이 10:58:47 시작·10:59:13 완료(`No migrations to apply.`), 새 ReplicaSet은 10:59:14(API·워커 2종)·10:59:16(Beat)에 생겼다. 마이그레이션이 끝난 뒤에 새 이미지 교체가 시작됐다. 요청 99건 모두 200, 재시작 0.
+  - rollback(revision 4 `Rollback to 2`): `helm rollback shopping 2 --wait` 17.7초. Deployment 4개 `9836d194`, API는 옛 ReplicaSet `69896b69b7` 다시 씀, migrate Job은 `mytest` 그대로(rollback에는 hook 없음). 요청 31건(20:00:10~20:00:28) 모두 200. 요청은 마지막 옛 Pod가 종료를 시작한 20:00:28에 멈춰, 그 Pod의 preStop 10초 동안은 보지 않았다. 재시작 0.
+  - 요청은 Windows `curl`로 0.2초 쉬고 보내 초당 약 1.5건이다. 앞의 교체 시험(성공 1,271건)보다 훨씬 적어 끊김이 없었다는 근거로는 약하다. 각 1회.
 
 ## 돌려 보지 않은 것
 
