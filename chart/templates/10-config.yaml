@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shopping-config
+  namespace: {{ .Release.Namespace }}
+data:
+  # production: DEBUG off, HTTPS redirect, secure cookies (myproject/settings/production.py).
+  DJANGO_ENV: production
+  CSRF_TRUSTED_ORIGINS: https://localhost
+  DEPLOYMENT_ENV: staging
+  DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,shopping-api
+  DATABASE_ENGINE: django.db.backends.postgresql
+  DATABASE_NAME: shopping_db
+  DATABASE_USER: shopping_user
+  DATABASE_HOST: postgres
+  DATABASE_PORT: "5432"
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/0
+  EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
+  GUNICORN_WORKERS: "2"

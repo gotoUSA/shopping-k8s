@@ -1,0 +1,14 @@
+# Only the values that change between deploys are here; everything else stays
+# as written in templates/ (the same text as manifests/).
+
+image:
+  repository: localhost:5000/shopping
+  # Empty = Chart.yaml appVersion. Set per deploy: --set image.tag=<tag>
+  tag: ""
+
+api:
+  # The HPA owns the API replica count (templates/40-api.yaml has no replicas).
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 50

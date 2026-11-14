@@ -1,0 +1,24 @@
+# Only this Gateway's Envoy proxy may open connections to the API pods.
+# Without it, any pod in the cluster could send X-Forwarded-Proto: https
+# straight to the API and be treated as an HTTPS request.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: shopping-api-from-gateway
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: shopping-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              gateway.envoyproxy.io/owning-gateway-name: shopping
+      ports:
+        - port: 8000

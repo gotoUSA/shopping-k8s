@@ -1,0 +1,202 @@
+# The shopping settings set the "celery" logger to propagate: False, and
+# under Celery it ends up with no handlers, so Celery's own messages (task
+# received/succeeded, broker reconnects, Beat startup errors) are dropped.
+# The shopping repository is frozen, so this settings module imports the
+# original settings and flips only that value (tests/beat-logging.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: celery-log-override
+  namespace: {{ .Release.Namespace }}
+data:
+  celery_log_override.py: |
+    from myproject.settings import *  # noqa: F401, F403
+
+    LOGGING["loggers"]["celery"]["propagate"] = True  # noqa: F405
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-main
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-main
+  template:
+    metadata:
+      labels:
+        app: celery-main
+    spec:
+      containers:
+        - name: worker
+          image: {{ include "shopping.image" . }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - celery
+            - -A
+            - myproject
+            - worker
+            - -n
+            - main@%h
+            - -l
+            - info
+            - --concurrency=2
+            - -Q
+            - default,payment_critical,order_processing,points,notifications
+            - --prefetch-multiplier=1
+          # Idle use measured 2026-11-08: about 2m CPU, 232Mi memory.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          envFrom:
+            - configMapRef:
+                name: shopping-config
+            - secretRef:
+                name: shopping-secret
+          env:
+            - name: DJANGO_SETTINGS_MODULE
+              value: celery_log_override
+          volumeMounts:
+            - name: celery-log-override
+              mountPath: /code/celery_log_override.py
+              subPath: celery_log_override.py
+      volumes:
+        - name: celery-log-override
+          configMap:
+            name: celery-log-override
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-external
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: celery-external
+  template:
+    metadata:
+      labels:
+        app: celery-external
+    spec:
+      containers:
+        - name: worker
+          image: {{ include "shopping.image" . }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - celery
+            - -A
+            - myproject
+            - worker
+            - -n
+            - external@%h
+            - -l
+            - info
+            - --concurrency=2
+            - -Q
+            - external_api
+            - --prefetch-multiplier=1
+          # Idle use measured 2026-11-08: about 2m CPU, 232Mi memory.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          envFrom:
+            - configMapRef:
+                name: shopping-config
+            - secretRef:
+                name: shopping-secret
+          env:
+            - name: DJANGO_SETTINGS_MODULE
+              value: celery_log_override
+          volumeMounts:
+            - name: celery-log-override
+              mountPath: /code/celery_log_override.py
+              subPath: celery_log_override.py
+      volumes:
+        - name: celery-log-override
+          configMap:
+            name: celery-log-override
+---
+# Beat stays at one replica so scheduled tasks are not sent twice.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: celery-beat
+  template:
+    metadata:
+      labels:
+        app: celery-beat
+    spec:
+      # Beat reads its schedule from PostgreSQL (DatabaseScheduler) and exits
+      # with code 1 if the DB is down at start. Wait for the DB first.
+      # On a fresh install the migrate Job (post-install hook) runs after this
+      # Pod starts, and Beat exited on the missing django_celery_beat tables
+      # (2026-11-14). So also wait until no migration is left unapplied.
+      initContainers:
+        - name: wait-for-db
+          image: {{ include "shopping.image" . }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - >-
+              until pg_isready -h "$DATABASE_HOST" -p "$DATABASE_PORT"; do echo waiting for db; sleep 2; done;
+              until python manage.py migrate --check >/dev/null; do echo waiting for migrations; sleep 2; done
+          envFrom:
+            - configMapRef:
+                name: shopping-config
+            - secretRef:
+                name: shopping-secret
+      containers:
+        - name: beat
+          image: {{ include "shopping.image" . }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - celery
+            - -A
+            - myproject
+            - beat
+            - -l
+            - info
+            - --scheduler
+            - django_celery_beat.schedulers:DatabaseScheduler
+          # Idle use measured 2026-11-08: about 1m CPU, 144Mi memory.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              memory: 384Mi
+          envFrom:
+            - configMapRef:
+                name: shopping-config
+            - secretRef:
+                name: shopping-secret
+          env:
+            - name: DJANGO_SETTINGS_MODULE
+              value: celery_log_override
+          volumeMounts:
+            - name: celery-log-override
+              mountPath: /code/celery_log_override.py
+              subPath: celery_log_override.py
+      volumes:
+        - name: celery-log-override
+          configMap:
+            name: celery-log-override

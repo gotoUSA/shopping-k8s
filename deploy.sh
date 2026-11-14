@@ -27,7 +27,9 @@ MSYS_NO_PATHCONV=1 docker exec "$NODE" sh -c \
   'mkdir -p /etc/containerd/certs.d/localhost:5000 &&
    printf "[host.\"http://registry:5000\"]\n" > /etc/containerd/certs.d/localhost:5000/hosts.toml'
 
-kubectl apply -f manifests/00-namespace.yaml
+# The namespace is made here, not by the chart: the Secrets below go into it
+# before the chart is installed.
+kubectl get namespace shopping >/dev/null 2>&1 || kubectl create namespace shopping
 if ! kubectl -n shopping get secret shopping-secret >/dev/null 2>&1; then
   SK=$(gen "import secrets; print(secrets.token_urlsafe(50))")
   EK=$(gen "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
@@ -50,27 +52,30 @@ if ! kubectl -n shopping get secret shopping-tls >/dev/null 2>&1; then
   echo "tls secret created"
 fi
 
-kubectl apply -f manifests/10-config.yaml -f manifests/20-postgres.yaml -f manifests/21-redis.yaml
-kubectl -n shopping rollout status statefulset/postgres --timeout=180s
-kubectl -n shopping rollout status statefulset/redis --timeout=120s
-
-kubectl apply -f manifests/30-migrate-job.yaml
-if ! kubectl -n shopping wait --for=condition=complete job/migrate --timeout=240s; then
-  kubectl -n shopping get pods
-  kubectl -n shopping logs job/migrate --tail=30
-  exit 1
-fi
-kubectl -n shopping logs job/migrate --tail=3
-
-kubectl apply -f manifests/40-api.yaml -f manifests/50-workers.yaml
-kubectl -n shopping rollout status deployment/shopping-api --timeout=200s
-
-kubectl apply -f addons/metrics-server-v0.9.1.yaml
-kubectl apply -f manifests/60-api-hpa.yaml
-
+# Envoy Gateway first: the chart has a GatewayClass, Gateway and EnvoyProxy,
+# whose kinds (CRDs) this install adds.
 kubectl apply --server-side -f addons/envoy-gateway-v1.9.3-install.yaml >/dev/null
 kubectl -n envoy-gateway-system wait --for=condition=Available deployment/envoy-gateway --timeout=300s
-kubectl apply -f manifests/70-gateway.yaml
-# Only the Gateway's Envoy may reach the API (kindnet enforces it).
-kubectl apply -f manifests/80-networkpolicy.yaml
+
+# metrics-server from its official chart (the HPA reads CPU from it).
+# Chart 3.14.0 ships app v0.9.0; the image tag keeps v0.9.1. kind's kubelet
+# certificate is self-signed, hence --kubelet-insecure-tls.
+helm upgrade --install metrics-server metrics-server \
+  --repo https://kubernetes-sigs.github.io/metrics-server/ --version 3.14.0 \
+  -n kube-system --set image.tag=v0.9.1 --set 'args={--kubelet-insecure-tls}' --wait
+
+# The app: the first run installs (migrate Job right after the rest is created),
+# later runs upgrade (migrate Job before the Deployments change).
+# The image tag comes from IMAGE above.
+# hookOnly: Helm waits for the migrate Job only. With --wait it would hold the
+# Job until all Pods are Ready, but Beat waits for the migrations (deadlock,
+# see chart/templates/30-migrate-job.yaml). Rollouts are checked after.
+helm upgrade --install shopping chart -n shopping \
+  --set image.tag="${IMAGE#*:}" --wait=hookOnly --timeout 10m
+kubectl -n shopping logs job/migrate --tail=3
+for d in shopping-api celery-main celery-external celery-beat; do
+  kubectl -n shopping rollout status "deployment/$d" --timeout=300s
+done
+kubectl -n shopping rollout status statefulset/postgres --timeout=60s
+kubectl -n shopping rollout status statefulset/redis --timeout=60s
 kubectl -n shopping get pods

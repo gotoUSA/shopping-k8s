@@ -1,0 +1,62 @@
+# Redis holds the Celery queues. As a Deployment without a volume, a new pod
+# started empty and queued tasks were lost (RECORD.md, 2026-11-08).
+# StatefulSet + volume keeps /data across pod replacement, and with one
+# replica the old pod stops before the new one starts, so two Redis pods are
+# never behind the Service at once.
+# appendonly: every write goes to a log on the volume, synced once a second,
+# so a crash loses at most about the last second (not tested; see RECORD.md).
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: {{ .Release.Namespace }}
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args: [--appendonly, "yes", --appendfsync, everysec]
+          ports:
+            - containerPort: 6379
+          readinessProbe:
+            exec:
+              command: [redis-cli, ping]
+            periodSeconds: 5
+          # Idle use measured 2026-11-08: 5-6m CPU, 33Mi memory.
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379

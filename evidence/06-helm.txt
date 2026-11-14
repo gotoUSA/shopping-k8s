@@ -1,0 +1,249 @@
+$ helm version
+version.BuildInfo{Version:"v4.3.1", GitCommit:"c0d08d0d6d9424d4a14febb5e8a3e51b0dd00dff", GitTreeState:"clean", GoVersion:"go1.27.2", KubeClientVersion:"v1.37"}
+
+$ helm template shopping chart -n shopping > rendered.yaml && python tests/helm-template-diff.py rendered.yaml
+only in manifests: [('Namespace', None, 'shopping')]
+only in chart: []
+('Job', 'shopping', 'migrate')
+  + .metadata.annotations = {'helm.sh/hook': 'post-install,pre-upgrade', 'helm.sh/hook-delete-policy': 'before-hook-creation'}
+identical: 17 of 18
+
+$ helm history shopping -n shopping
+REVISION	UPDATED                 	STATUS    	CHART         	APP VERSION	DESCRIPTION                                                         
+1       	Sat Nov 14 18:45:42 2026	superseded	shopping-0.1.0	9836d194   	Release "shopping" failed: conflict occurred while applying object s
+2       	Sat Nov 14 18:46:47 2026	superseded	shopping-0.1.0	9836d194   	Upgrade complete                                                    
+3       	Sat Nov 14 18:47:39 2026	failed    	shopping-0.1.0	9836d194   	Upgrade "shopping" failed: conflict occurred while applying object s
+        	                        	          	              	           	- .spec.template.spec.containers[name="beat"].image                 
+        	                        	          	              	           	- .spec.template.spec.initContainers[name="wait-for-db"].image      
+4       	Sat Nov 14 18:48:01 2026	superseded	shopping-0.1.0	9836d194   	Upgrade complete                                                    
+5       	Sat Nov 14 18:49:18 2026	deployed  	shopping-0.1.0	9836d194   	Rollback to 2                                                       
+
+$ helm get values shopping -n shopping --revision 4
+USER-SUPPLIED VALUES:
+image:
+  tag: mytest
+
+$ helm list -A
+NAME          	NAMESPACE  	REVISION	UPDATED                              	STATUS  	CHART                	APP VERSION
+metrics-server	kube-system	1       	2026-11-14 18:50:37.8331519 +0900 KST	deployed	metrics-server-3.14.0	0.9.0      
+shopping      	shopping   	5       	2026-11-14 18:49:18.7679366 +0900 KST	deployed	shopping-0.1.0       	9836d194   
+
+$ kubectl -n shopping get deploy (image)
+NAME              IMAGE
+celery-beat       localhost:5000/shopping:9836d194
+celery-external   localhost:5000/shopping:9836d194
+celery-main       localhost:5000/shopping:9836d194
+shopping-api      localhost:5000/shopping:9836d194
+
+$ kubectl -n shopping get job migrate (image, created)
+localhost:5000/shopping:mytest 2026-11-14T09:48:02Z
+
+$ kubectl -n shopping get hpa
+NAME           REFERENCE                 TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+shopping-api   Deployment/shopping-api   cpu: 1%/50%   2         6         6          3d
+
+$ curl -sk https://localhost:8443/health/
+{"status": "ok"}
+
+======== 2026-11-14 19:38 empty kind cluster: kind delete cluster --name shopping && kind create cluster --config kind/cluster.yaml && bash deploy.sh
+The push refers to repository [localhost:5000/shopping]
+2ee425e27826: Waiting
+66f761454cee: Waiting
+1509ed2c8c3b: Waiting
+ecc510c1e359: Waiting
+a2de4e1115ac: Waiting
+d5efed949390: Waiting
+9be525ee2fe6: Waiting
+6912e23eb445: Waiting
+ac8162e3d0ca: Waiting
+e93cf5833627: Waiting
+bbc5a1223747: Waiting
+8d0bd777ca1b: Waiting
+62f4f8e0194e: Waiting
+75b6a36c64a1: Waiting
+7ca99f159a7c: Waiting
+e93cf5833627: Waiting
+bbc5a1223747: Waiting
+8d0bd777ca1b: Waiting
+62f4f8e0194e: Waiting
+75b6a36c64a1: Waiting
+7ca99f159a7c: Waiting
+2ee425e27826: Waiting
+66f761454cee: Waiting
+1509ed2c8c3b: Waiting
+ecc510c1e359: Waiting
+a2de4e1115ac: Waiting
+d5efed949390: Waiting
+9be525ee2fe6: Waiting
+6912e23eb445: Waiting
+ac8162e3d0ca: Waiting
+e93cf5833627: Waiting
+bbc5a1223747: Waiting
+8d0bd777ca1b: Waiting
+62f4f8e0194e: Waiting
+75b6a36c64a1: Waiting
+7ca99f159a7c: Waiting
+2ee425e27826: Waiting
+66f761454cee: Waiting
+1509ed2c8c3b: Waiting
+ecc510c1e359: Waiting
+a2de4e1115ac: Waiting
+d5efed949390: Waiting
+9be525ee2fe6: Waiting
+6912e23eb445: Waiting
+ac8162e3d0ca: Waiting
+66f761454cee: Waiting
+1509ed2c8c3b: Waiting
+ecc510c1e359: Waiting
+a2de4e1115ac: Waiting
+d5efed949390: Waiting
+9be525ee2fe6: Waiting
+6912e23eb445: Waiting
+ac8162e3d0ca: Waiting
+e93cf5833627: Waiting
+bbc5a1223747: Waiting
+8d0bd777ca1b: Waiting
+62f4f8e0194e: Waiting
+75b6a36c64a1: Waiting
+7ca99f159a7c: Waiting
+2ee425e27826: Waiting
+6912e23eb445: Waiting
+ac8162e3d0ca: Waiting
+e93cf5833627: Waiting
+bbc5a1223747: Waiting
+8d0bd777ca1b: Waiting
+62f4f8e0194e: Waiting
+75b6a36c64a1: Waiting
+7ca99f159a7c: Waiting
+2ee425e27826: Waiting
+66f761454cee: Waiting
+1509ed2c8c3b: Waiting
+ecc510c1e359: Waiting
+a2de4e1115ac: Waiting
+d5efed949390: Waiting
+9be525ee2fe6: Waiting
+75b6a36c64a1: Waiting
+7ca99f159a7c: Waiting
+2ee425e27826: Waiting
+66f761454cee: Waiting
+1509ed2c8c3b: Waiting
+ecc510c1e359: Waiting
+a2de4e1115ac: Waiting
+d5efed949390: Waiting
+9be525ee2fe6: Waiting
+6912e23eb445: Waiting
+ac8162e3d0ca: Waiting
+e93cf5833627: Waiting
+bbc5a1223747: Waiting
+8d0bd777ca1b: Waiting
+62f4f8e0194e: Waiting
+75b6a36c64a1: Layer already exists
+7ca99f159a7c: Already exists
+2ee425e27826: Layer already exists
+66f761454cee: Layer already exists
+1509ed2c8c3b: Layer already exists
+ecc510c1e359: Layer already exists
+a2de4e1115ac: Layer already exists
+d5efed949390: Layer already exists
+9be525ee2fe6: Layer already exists
+6912e23eb445: Layer already exists
+ac8162e3d0ca: Layer already exists
+e93cf5833627: Layer already exists
+bbc5a1223747: Layer already exists
+8d0bd777ca1b: Layer already exists
+62f4f8e0194e: Layer already exists
+9836d194: digest: sha256:ffe3ef24923c035af0127613d6e6e711d19f3248edc7ae4042d8ba7972d668ba size: 856
+namespace/shopping created
+secret created
+tls secret created
+deployment.apps/envoy-gateway condition met
+Release "metrics-server" does not exist. Installing it now.
+NAME: metrics-server
+LAST DEPLOYED: Sat Nov 14 19:38:58 2026
+NAMESPACE: kube-system
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+TEST SUITE: None
+NOTES:
+***********************************************************************
+* Metrics Server                                                      *
+***********************************************************************
+  Chart version: 3.14.0
+  App version:   0.9.0
+  Image tag:     registry.k8s.io/metrics-server/metrics-server:v0.9.1
+***********************************************************************
+Release "shopping" does not exist. Installing it now.
+NAME: shopping
+LAST DEPLOYED: Sat Nov 14 19:39:25 2026
+NAMESPACE: shopping
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+TEST SUITE: None
+NOTES:
+Release shopping (revision 1), image localhost:5000/shopping:9836d194.
+  kubectl -n shopping get pods
+  curl -k https://localhost:8443/health/
+Defaulted container "migrate" out of: migrate, wait-for-db (init)
+  Applying token_blacklist.0011_linearizes_history... OK
+  Applying token_blacklist.0012_alter_outstandingtoken_user... OK
+  Applying token_blacklist.0013_alter_blacklistedtoken_options_and_more... OK
+deployment "shopping-api" successfully rolled out
+deployment "celery-main" successfully rolled out
+deployment "celery-external" successfully rolled out
+Waiting for deployment "celery-beat" rollout to finish: 0 of 1 updated replicas are available...
+deployment "celery-beat" successfully rolled out
+partitioned roll out complete: 1 new pods have been updated...
+partitioned roll out complete: 1 new pods have been updated...
+NAME                              READY   STATUS      RESTARTS   AGE
+celery-beat-549b8844db-jgwwq      1/1     Running     0          3m15s
+celery-external-5964d665d-76lnk   1/1     Running     0          3m15s
+celery-main-5b9444594b-4xdrs      1/1     Running     0          3m15s
+migrate-zkcmn                     0/1     Completed   0          3m15s
+postgres-0                        1/1     Running     0          3m15s
+redis-0                           1/1     Running     0          3m15s
+shopping-api-69896b69b7-qcc4g     1/1     Running     0          2m53s
+shopping-api-69896b69b7-vhzww     1/1     Running     0          3m15s
+
+real	4m16.625s
+user	0m0.334s
+sys	0m0.803s
+
+$ kubectl -n shopping logs job/migrate -c wait-for-db | sort | uniq -c  (job re-run at 19:43, see below; this is the 19:39 run as captured then)
+      1 postgres:5432 - accepting connections
+     25 postgres:5432 - no response
+     25 waiting for db
+
+$ kubectl -n shopping logs deploy/celery-beat -c wait-for-db | sort | uniq -c
+      1 postgres:5432 - accepting connections
+     25 postgres:5432 - no response
+     25 waiting for db
+      4 waiting for migrations
+
+$ celery-main -> http://shopping-api:8000/health/ with X-Forwarded-Proto: https (NetworkPolicy)
+blocked: URLError <urlopen error timed out>
+
+$ curl -sk https://localhost:8443/health/
+{"status": "ok"}
+
+======== 19:43 second run: bash deploy.sh (upgrade path)
+$ helm history shopping -n shopping
+REVISION	UPDATED                 	STATUS    	CHART         	APP VERSION	DESCRIPTION     
+1       	Sat Nov 14 19:39:25 2026	superseded	shopping-0.1.0	9836d194   	Install complete
+2       	Sat Nov 14 19:43:25 2026	deployed  	shopping-0.1.0	9836d194   	Upgrade complete
+
+$ kubectl -n shopping logs job/migrate -c migrate --tail=2
+Running migrations:
+  No migrations to apply.
+
+$ kubectl -n shopping get pods
+NAME                              READY   STATUS      RESTARTS   AGE
+celery-beat-549b8844db-jgwwq      1/1     Running     0          4m38s
+celery-external-5964d665d-76lnk   1/1     Running     0          4m38s
+celery-main-5b9444594b-4xdrs      1/1     Running     0          4m38s
+migrate-q9qhx                     0/1     Completed   0          40s
+postgres-0                        1/1     Running     0          4m38s
+redis-0                           1/1     Running     0          4m38s
+shopping-api-69896b69b7-qcc4g     1/1     Running     0          4m16s
+shopping-api-69896b69b7-vhzww     1/1     Running     0          4m38s

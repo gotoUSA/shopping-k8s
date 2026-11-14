@@ -1,0 +1,73 @@
+# Traffic from outside the cluster goes through the Gateway API, served by
+# Envoy Gateway (addons/envoy-gateway-v1.9.3-install.yaml).
+# Not an Ingress: the Ingress NGINX repository is archived (last release
+# 2026-03-19), and the Gateway API is the maintained successor.
+# kind has no LoadBalancer, so the Envoy Service is a NodePort on fixed ports
+# that kind/cluster.yaml maps to the host: localhost:8080 (HTTP), :8443 (HTTPS).
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: envoy
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: nodeport
+  namespace: {{ .Release.Namespace }}
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: NodePort
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports:
+                - port: 80
+                  nodePort: 30080
+                - port: 443
+                  nodePort: 30443
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: shopping
+  namespace: {{ .Release.Namespace }}
+spec:
+  gatewayClassName: envoy
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: nodeport
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+    # TLS ends here; the API gets plain HTTP with X-Forwarded-Proto: https.
+    - name: https
+      protocol: HTTPS
+      port: 443
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: shopping-tls
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: shopping-api
+  namespace: {{ .Release.Namespace }}
+spec:
+  parentRefs:
+    - name: shopping
+  hostnames:
+    - localhost
+  rules:
+    - backendRefs:
+        - name: shopping-api
+          port: 8000

@@ -1,0 +1,3 @@
+Release {{ .Release.Name }} (revision {{ .Release.Revision }}), image {{ include "shopping.image" . }}.
+  kubectl -n {{ .Release.Namespace }} get pods
+  curl -k https://localhost:8443/health/

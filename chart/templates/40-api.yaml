@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shopping-api
+  namespace: {{ .Release.Namespace }}
+spec:
+  # replicas is left to the HPA (60-api-hpa.yaml), so apply does not fight it.
+  selector:
+    matchLabels:
+      app: shopping-api
+  template:
+    metadata:
+      labels:
+        app: shopping-api
+    spec:
+      # Allow the 10-second preStop wait plus gunicorn's graceful shutdown.
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: api
+          image: {{ include "shopping.image" . }}
+          imagePullPolicy: IfNotPresent
+          # Keep listening while Service rules stop sending new connections.
+          lifecycle:
+            preStop:
+              exec:
+                command: [sleep, "10"]
+          command: [gunicorn, "myproject.wsgi:application", -c, gunicorn.conf.py]
+          ports:
+            - containerPort: 8000
+          # Idle use measured 2026-11-08: about 5m CPU, 223-247Mi memory.
+          # HPA utilization is measured against the CPU request.
+          # No CPU limit: going over it throttles instead of restarting.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          envFrom:
+            - configMapRef:
+                name: shopping-config
+            - secretRef:
+                name: shopping-secret
+          # Probes reach the pod by IP, which ALLOWED_HOSTS rejects, so set Host.
+          # Production settings redirect plain HTTP to HTTPS with a 301, and a
+          # probe counts any 200-399 as success, so without X-Forwarded-Proto the
+          # probe passed on the redirect and /health/ never ran (2026-11-11).
+          startupProbe:
+            httpGet:
+              path: /health/
+              port: 8000
+              httpHeaders:
+                - name: Host
+                  value: localhost
+                - name: X-Forwarded-Proto
+                  value: https
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+              path: /health/
+              port: 8000
+              httpHeaders:
+                - name: Host
+                  value: localhost
+                - name: X-Forwarded-Proto
+                  value: https
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/
+              port: 8000
+              httpHeaders:
+                - name: Host
+                  value: localhost
+                - name: X-Forwarded-Proto
+                  value: https
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shopping-api
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: shopping-api
+  ports:
+    - port: 8000

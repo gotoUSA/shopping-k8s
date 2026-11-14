@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  namespace: {{ .Release.Namespace }}
+  # A Job's pod template cannot be changed, so a plain apply with a new image
+  # fails. As a hook, Helm deletes the old Job and runs a new one each time:
+  # install: right after the other resources are created (the init container
+  # below waits for PostgreSQL);
+  # upgrade: before the Deployments get the new image, so new code meets the new schema.
+  # Install with --wait=hookOnly, not --wait: --wait holds post-install hooks
+  # until every Pod is Ready, and Beat's init container waits for this Job,
+  # so neither ever finished (2026-11-14, 10-minute timeout).
+  # The finished Job stays until the next run, for `kubectl logs job/migrate`.
+  annotations:
+    "helm.sh/hook": post-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-db
+          image: {{ include "shopping.image" . }}
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - until pg_isready -h "$DATABASE_HOST" -p "$DATABASE_PORT"; do echo waiting for db; sleep 2; done
+          envFrom:
+            - configMapRef:
+                name: shopping-config
+      containers:
+        - name: migrate
+          image: {{ include "shopping.image" . }}
+          imagePullPolicy: IfNotPresent
+          command: [python, manage.py, migrate, --noinput]
+          envFrom:
+            - configMapRef:
+                name: shopping-config
+            - secretRef:
+                name: shopping-secret

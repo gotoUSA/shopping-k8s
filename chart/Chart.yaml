@@ -1,0 +1,7 @@
+apiVersion: v2
+name: shopping
+description: The shopping stack (API, Celery, PostgreSQL, Redis, Gateway) on the local kind cluster.
+type: application
+version: 0.1.0
+# The image tag used when values.yaml leaves image.tag empty.
+appVersion: "9836d194"
